@@ -8,9 +8,11 @@ Singleton {
     id: root
 
     readonly property alias cfg: adapter
+    readonly property string configDir: `${Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config"}/caelestia`
+    property string siftdogKey: ""
 
     FileView {
-        path: `${Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config"}/caelestia/ai.json`
+        path: `${root.configDir}/ai.json`
         watchChanges: true
         onFileChanged: reload()
         onAdapterUpdated: writeAdapter()
@@ -37,8 +39,20 @@ Singleton {
             property string openClawToken: ""
             property string openClawModel: "openclaw/default"
 
+            property bool enableWebTools: true
+            property string siftdogUrl: "http://192.168.1.113:8101"
+
             property var recentModels: []
             property string ollamaHistoryJson: "[]"
         }
+    }
+
+    FileView {
+        path: `${root.configDir}/siftdog.key`
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.siftdogKey = text().trim()
+        onLoadFailed: root.siftdogKey = ""
     }
 }

@@ -293,30 +293,62 @@ Item {
     }
     property bool inAgentLoop: false
 
-    function runAgentCommand(cmd, type) {
-        var processQml = "import QtQuick\n" +
-                         "import Quickshell.Io\n" +
-                         "Process {\n" +
-                         "    id: proc\n" +
-                         "    command: [\"sh\", \"-c\", " + JSON.stringify(cmd) + "]\n" +
-                         "    property string outStr: \"\"\n" +
-                         "    property string errStr: \"\"\n" +
-                         "    property bool hasExited: false\n" +
-                                                  "    property int exitCode: 0\n" +
-                         "    property bool outFinished: false\n" +
-                         "    property bool errFinished: false\n" +
-                         "    function checkDone() {\n" +
-                         "        if (hasExited && outFinished && errFinished) {\n" +
-                         "            root.handleAgentProcessResult(" + JSON.stringify(type) + ", proc.outStr, proc.errStr, " + JSON.stringify(cmd) + ", proc.exitCode);\n" +
-                         "            proc.destroy();\n" +
-                         "        }\n" +
-                         "    }\n" +
-                         "    stdout: StdioCollector { onStreamFinished: { proc.outStr = text || \"\"; proc.outFinished = true; proc.checkDone(); } }\n" +
-                         "    stderr: StdioCollector { onStreamFinished: { proc.errStr = text || \"\"; proc.errFinished = true; proc.checkDone(); } }\n" +
-                         "    onExited: code => { proc.exitCode = code; proc.hasExited = true; proc.checkDone(); }\n" +
-                         "}";
-        var obj = Qt.createQmlObject(processQml, root, "agentProcess");
-        obj.running = true;
+    readonly property bool webToolsEnabled: AiSettings.cfg.enableWebTools === true && AiSettings.siftdogKey !== "" && (AiSettings.cfg.siftdogUrl || "") !== ""
+
+    function siftdogRequest(endpoint, body, toolName, format) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", AiSettings.cfg.siftdogUrl.replace(/\/+$/, "") + endpoint, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.setRequestHeader("Authorization", "Bearer " + AiSettings.siftdogKey);
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return;
+            var result;
+            if (xhr.status === 200) {
+                try {
+                    result = format(JSON.parse(xhr.responseText));
+                } catch (e) {
+                    result = "TOOL FAILED: could not parse the response (" + e.message + "). Do not retry.";
+                }
+            } else {
+                var detail = "";
+                try {
+                    var err = JSON.parse(xhr.responseText);
+                    detail = err.detail || err.error || "";
+                    if (typeof detail !== "string")
+                        detail = JSON.stringify(detail);
+                } catch (e) {}
+                result = "TOOL FAILED with HTTP " + xhr.status + (detail ? ": " + detail : "") + ". Do not retry.";
+            }
+            root.recordToolResult(toolName, result);
+            root.runningToolsCount--;
+            root.checkToolsFinished();
+        };
+        xhr.send(JSON.stringify(body));
+    }
+
+    function siftdogSearch(query) {
+        siftdogRequest("/search", { "query": query, "search_depth": "advanced", "max_results": 5, "chunks_per_source": 3 }, "web_search", data => {
+            var res = data.results || [];
+            if (res.length === 0)
+                return "No results for: " + query;
+            var out = "Results for: " + query;
+            for (var i = 0; i < res.length; i++)
+                out += "\n\n[" + (i + 1) + "] " + (res[i].title || "") + "\n" + (res[i].url || "") + "\n" + String(res[i].content || "").substring(0, 1500);
+            return out;
+        });
+    }
+
+    function siftdogExtract(url) {
+        siftdogRequest("/extract", { "urls": [url], "format": "markdown" }, "read_webpage", data => {
+            var ok = data.results || [];
+            if (ok.length > 0) {
+                var text = String(ok[0].raw_content || "");
+                return "Page: " + (ok[0].url || url) + "\n\n" + text.substring(0, 8000) + (text.length > 8000 ? "\n\n[truncated]" : "");
+            }
+            var failed = data.failed_results || [];
+            return "TOOL FAILED: could not read " + url + (failed.length > 0 && failed[0].error ? " (" + failed[0].error + ")" : "") + ". Do not retry.";
+        });
     }
 
     property int runningToolsCount: 0
@@ -1138,7 +1170,7 @@ Item {
                         saveHistory();
                         
                         if (finalToolCalls && finalToolCalls.length > 0) {
-                            var enableTools = AiSettings.cfg.enableCelestialMode;
+                            var enableTools = root.webToolsEnabled;
                             if (enableTools) {
                                 currentActionText = "Using tools...";
                                 toolResultMap = {};
@@ -1187,44 +1219,17 @@ Item {
                                 
                                 for (var t = 0; t < calls.length; t++) {
                                     var toolName = calls[t].name;
-                                    var args = calls[t].args;
-                                    
-                                    if (toolName === "web_search" || toolName === "read_webpage" || toolName === "open_app" || toolName === "get_weather" || toolName === "caelestia_command") {
-                                        runningToolsCount++;
-                                    }
-                                    
-                                    if (toolName === "web_search") {
+                                    var args = calls[t].args || {};
+                                    if (toolName === "web_search" && args.query) {
                                         currentActionText = "Searching the web...";
-                                        var query = args.query;
-                                        var page = args.page || 1;
-                                        runAgentCommand('PYTHONIOENCODING=utf8 python3 "' + Quickshell.shellDir + '/assets/scripts/orion_search.py" --mode search --query "' + query.replace(new RegExp("\"", "g"), '\"') + '" --page ' + page, "exec_" + toolName);
-                                    } else if (toolName === "read_webpage") {
+                                        runningToolsCount++;
+                                        root.siftdogSearch(String(args.query));
+                                    } else if (toolName === "read_webpage" && args.url) {
                                         currentActionText = "Reading webpage...";
-                                        var url = args.url;
-                                        runAgentCommand('PYTHONIOENCODING=utf8 python3 "' + Quickshell.shellDir + '/assets/scripts/orion_search.py" --mode read --url "' + url.replace(new RegExp("\"", "g"), '\"') + '"', "exec_" + toolName);
-                                    } else if (toolName === "open_app") {
-                                        currentActionText = "Opening app...";
-                                        var app = args.app_name;
-                                        runAgentCommand('grep -i -m 1 "^Exec=" $(find /usr/share/applications ~/.local/share/applications -name "*.desktop" -exec grep -il "Name=.*' + app.replace(new RegExp("\"", "g"), '\"') + '" {} \;) | cut -d "=" -f 2- | sed "s/ %[a-zA-Z]//g" | xargs -I {} sh -c "{} & disown"', "exec_" + toolName);
-                                    } else if (toolName === "set_timer") {
-                                        currentActionText = "Setting timer...";
-                                        var secs = args.seconds || 5;
-                                        var msg = args.message || "Timer finished";
-                                        var safeMsg = msg.replace(new RegExp("\"", "g"), '\"');
-                                        var timerQml = "import QtQuick; Timer { interval: " + (secs * 1000) + "; running: true; onTriggered: { root.runAgentCommand('notify-send \"Orion Timer\" \"" + safeMsg + "\"', \"timer_trigger\"); destroy(); } }";
-                                        Qt.createQmlObject(timerQml, root, "timer_" + Date.now());
-                                        recordToolResult("set_timer", "Timer successfully set for " + secs + " seconds in the background.");
-                                    } else if (toolName === "get_weather") {
-                                        currentActionText = "Checking weather...";
-                                        var loc = args.location;
-                                        runAgentCommand('curl -s "wttr.in/' + loc.replace(new RegExp("\"", "g"), '\"') + '?0T"', "exec_" + toolName);
-                                    } else if (toolName === "caelestia_command") {
-                                        currentActionText = "Running caelestia...";
-                                        var subcmd = args.subcommand || "";
-                                        var subargs = args.args || "";
-                                        var cmd = "caelestia " + subcmd;
-                                        if (subargs) cmd += " " + subargs;
-                                        runAgentCommand(cmd, "exec_" + toolName);
+                                        runningToolsCount++;
+                                        root.siftdogExtract(String(args.url));
+                                    } else {
+                                        recordToolResult(toolName || "unknown", "Unknown tool or missing arguments. Only web_search(query) and read_webpage(url) exist.");
                                     }
                                 }
                                 
@@ -1283,8 +1288,10 @@ Item {
         };
 
         var messages = [];
-        var enableTools = AiSettings.cfg.enableCelestialMode;
-        var sysPrompt = "You are a helpful AI assistant integrated into the user's OS. You have no tools, no internet access and cannot search the web. Answer only from your own knowledge, never claim to have looked something up, and say clearly when information may be outdated or you are unsure.";
+        var enableTools = root.webToolsEnabled;
+        var sysPrompt = enableTools
+            ? "You are a helpful AI assistant integrated into the user's desktop. You can search the web with the web_search tool and read a specific page with the read_webpage tool. Use them for anything current, time-sensitive or that you are unsure about. Base your answer on the tool results, name the source URLs you used, and never invent results. You cannot do anything else on the user's computer."
+            : "You are a helpful AI assistant integrated into the user's desktop. You have no tools, no internet access and cannot search the web. Answer only from your own knowledge, never claim to have looked something up, and say clearly when information may be outdated or you are unsure.";
         if (enableTools) {
             sysPrompt += "\nCRITICAL RULES:\n1. You CAN browse the web using the web_search tool.\n2. DO NOT apologize for errors, simply explain what happened.\n3. When using tools, you don't need to explain that you are using a tool, just do it and respond to the user smoothly.\n4. If a tool call fails or returns an error, do NOT retry it and do NOT try workarounds with other tools. Briefly tell the user what failed and answer from your own knowledge if you can.\n5. After tools give you their results, answer the user directly; only call more tools when the request truly needs them.";
         }
@@ -1356,93 +1363,8 @@ Item {
         
         if (enableTools) {
             requestBody["tools"] = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "web_search",
-                        "description": "Searches the web using a headless Firefox browser. Returns the top 5 results with snippets and URLs. Requires the Playwright Firefox browser; if the call fails, tell the user to run: playwright install firefox.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": { "type": "string", "description": "The search query" },
-                                "page": { "type": "number", "description": "The page number to fetch (1-indexed, default is 1)" }
-                            },
-                            "required": ["query"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "read_webpage",
-                        "description": "Navigates to a specific URL and returns the main text content of the page.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "url": { "type": "string", "description": "The absolute URL to read" }
-                            },
-                            "required": ["url"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "open_app",
-                        "description": "Searches for and launches an application installed on the user's system via its .desktop file.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "app_name": { "type": "string", "description": "The name of the app to launch (e.g. firefox, kitty)" }
-                            },
-                            "required": ["app_name"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "set_timer",
-                        "description": "Sets a timer that will trigger a desktop notification when finished.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "seconds": { "type": "number", "description": "Duration in seconds" },
-                                "message": { "type": "string", "description": "Notification message" }
-                            },
-                            "required": ["seconds", "message"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_weather",
-                        "description": "Gets the current weather for a specific location.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "location": { "type": "string", "description": "City name" }
-                            },
-                            "required": ["location"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "caelestia_command",
-                        "description": "Execute a caelestia CLI command to manage the system. Valid subcommands: shell, toggle, scheme, search, screenshot, record, clipboard, emoji, wallpaper, resizer, install, update.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "subcommand": { "type": "string", "description": "The subcommand to run (e.g., scheme, wallpaper, toggle, record)" },
-                                "args": { "type": "string", "description": "Additional arguments to pass to the subcommand" }
-                            },
-                            "required": ["subcommand"]
-                        }
-                    }
-                }
+                { "type": "function", "function": { "name": "web_search", "description": "Search the web. Returns the top results with title, URL and the most relevant text excerpts of each page.", "parameters": { "type": "object", "properties": { "query": { "type": "string", "description": "The search query" } }, "required": ["query"] } } },
+                { "type": "function", "function": { "name": "read_webpage", "description": "Fetch a public web page by its absolute URL and return its main text as markdown.", "parameters": { "type": "object", "properties": { "url": { "type": "string", "description": "Absolute http(s) URL" } }, "required": ["url"] } } }
             ];
         }
         
