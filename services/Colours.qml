@@ -114,7 +114,6 @@ Singleton {
         if (Hypr.usingLua) {
             Hypr.extras.batchMessage([
                 `eval hl.config({ general = { col = { active_border = "rgba(${primary}e6)", inactive_border = "rgba(${onSurfaceVariant}11)" } } })`,
-                `eval hl.config({ decoration = { shadow = { color = "rgba(${surface}d4)" } } })`,
                 `eval hl.config({ misc = { background_color = "rgb(${surfaceContainer})" } })`,
                 `eval hl.config({ group = { col = { border_active = "rgba(${primary}e6)", border_inactive = "rgba(${onSurfaceVariant}11)", border_locked_active = "rgba(${primary}e6)", border_locked_inactive = "rgba(${onSurfaceVariant}11)" }, groupbar = { text_color = "rgb(${onPrimary})", col = { active = "rgba(${primary}d4)", inactive = "rgba(${outline}d4)", locked_active = "rgba(${primary}d4)", locked_inactive = "rgba(${secondary}d4)" } } } })`
             ]);
