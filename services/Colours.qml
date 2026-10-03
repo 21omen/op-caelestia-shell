@@ -102,7 +102,7 @@ Singleton {
     }
 
     function reloadHyprColours(): void {
-        const p = root.palette;
+        const p = root.current;
         const primary = colourToHex(p.m3primary);
         const onSurfaceVariant = colourToHex(p.m3onSurfaceVariant);
         const surface = colourToHex(p.m3surface);
