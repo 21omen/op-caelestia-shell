@@ -24,6 +24,8 @@ Item {
     readonly property bool isFocused: Hypr.focusedWorkspace?.id === modelData?.id
     readonly property bool isActiveOnMonitor: monitor?.activeWorkspace?.id === modelData?.id
     readonly property bool isSelected: OverviewState.selectedCardIndex === cardIndex
+    readonly property bool isSpecial: modelData?.name?.startsWith("special:") ?? false
+    readonly property string displayName: isSpecial ? modelData.name.slice("special:".length) : (modelData?.name ?? "")
     readonly property var toplevels: OverviewState.getToplevelsForWorkspace(modelData?.id ?? 0)
 
     signal clicked
@@ -63,7 +65,7 @@ Item {
 
             StyledText {
                 anchors.centerIn: parent
-                text: root.modelData?.id ?? ""
+                text: root.isSpecial ? root.displayName.charAt(0).toUpperCase() : (root.modelData?.id ?? "")
                 font.pixelSize: 11
                 font.weight: Font.Bold
                 color: root.isFocused ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
@@ -72,7 +74,7 @@ Item {
 
         // Workspace Name
         StyledText {
-            text: root.modelData?.name ?? qsTr("Workspace")
+            text: root.displayName || qsTr("Workspace")
             font.pixelSize: 13
             font.weight: Font.DemiBold
             color: root.isFocused ? Colours.palette.m3primary : Colours.palette.m3onSurface

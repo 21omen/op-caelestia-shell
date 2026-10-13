@@ -33,8 +33,10 @@ Singleton {
         const focusedId = Hypr.focusedWorkspace?.id ?? -1;
 
         const list = Hypr.workspaces.values.filter(ws => {
-            if (!ws || ws.name.startsWith("special:"))
+            if (!ws)
                 return false;
+            if (ws.name.startsWith("special:"))
+                return getToplevelsForWorkspace(ws.id).length > 0;
             if (monId >= 0 && ws.monitor && ws.monitor.id !== monId)
                 return false;
 
@@ -56,7 +58,14 @@ Singleton {
         }
 
         // Sort numerically by ID
-        list.sort((a, b) => a.id - b.id);
+        // Normal workspaces by ID first, then special workspaces by name
+        list.sort((a, b) => {
+            const sa = a.name.startsWith("special:");
+            const sb = b.name.startsWith("special:");
+            if (sa !== sb)
+                return sa ? 1 : -1;
+            return sa ? a.name.localeCompare(b.name) : a.id - b.id;
+        });
         return list;
     }
 
@@ -93,10 +102,27 @@ Singleton {
 
     // Focus a workspace and close overview
     function focusWorkspace(wsId: int, callback: var): void {
+        // Close an open special overlay first, otherwise the normal workspace stays hidden behind it
+        const openSpecial = Hypr.focusedMonitor?.lastIpcObject?.specialWorkspace?.name ?? "";
+        if (openSpecial.startsWith("special:")) {
+            const specialName = openSpecial.slice("special:".length);
+            Hypr.dispatch(Hypr.usingLua
+                ? `hl.dsp.workspace.toggle_special("${specialName}")`
+                : `togglespecialworkspace ${specialName}`);
+        }
         Hypr.dispatch(Hypr.usingLua
             ? `hl.dsp.focus({ workspace = "${wsId}" })`
             : `workspace ${wsId}`);
         if (callback) callback();
+    }
+
+    // Focus a normal workspace or toggle a special one
+    function activateWorkspace(ws: HyprlandWorkspace, callback: var): void {
+        if (!ws) return;
+        if (ws.name.startsWith("special:"))
+            toggleSpecialWorkspace(ws.name, callback);
+        else
+            focusWorkspace(ws.id, callback);
     }
 
     // Toggle/Focus a special workspace
@@ -112,11 +138,20 @@ Singleton {
     function focusWindow(toplevel: HyprlandToplevel, callback: var): void {
         if (!toplevel) return;
         const addr = toplevel.address;
-        const wsId = toplevel.workspace?.id;
-        if (wsId !== undefined) {
-            Hypr.dispatch(Hypr.usingLua
-                ? `hl.dsp.focus({ workspace = "${wsId}" })`
-                : `workspace ${wsId}`);
+        const wsName = toplevel.workspace?.name ?? "";
+        const openSpecial = Hypr.focusedMonitor?.lastIpcObject?.specialWorkspace?.name ?? "";
+        if (wsName.startsWith("special:")) {
+            // Show the window's special workspace unless it is already open
+            if (openSpecial !== wsName)
+                toggleSpecialWorkspace(wsName);
+        } else {
+            // Close an open special overlay, then switch to the normal workspace
+            if (openSpecial.startsWith("special:"))
+                toggleSpecialWorkspace(openSpecial);
+            if (wsName)
+                Hypr.dispatch(Hypr.usingLua
+                    ? `hl.dsp.focus({ workspace = "${wsName}" })`
+                    : `workspace ${wsName}`);
         }
         if (addr) {
             Hypr.dispatch(Hypr.usingLua
@@ -140,11 +175,12 @@ Singleton {
     // Move a window to a destination workspace
     function moveWindowToWorkspace(toplevel: HyprlandToplevel, wsId: int): void {
         if (!toplevel) return;
+        const target = wsId < 0 ? (Hypr.workspaces.values.find(w => w && w.id === wsId)?.name ?? wsId) : wsId;
         const addr = toplevel.address;
         if (addr) {
             Hypr.dispatch(Hypr.usingLua
-                ? `hl.dsp.window.move({ window = "address:0x${addr}", workspace = "${wsId}", follow = false })`
-                : `movetoworkspacesilent ${wsId},address:0x${addr}`);
+                ? `hl.dsp.window.move({ window = "address:0x${addr}", workspace = "${target}", follow = false })`
+                : `movetoworkspacesilent ${target},address:0x${addr}`);
         }
     }
 

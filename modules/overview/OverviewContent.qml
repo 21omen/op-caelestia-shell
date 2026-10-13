@@ -26,7 +26,7 @@ Item {
     Keys.onLeftPressed: event => {
         event.accepted = true;
         if (OverviewState.activeTab === 0) {
-            const workspaces = OverviewState.getNormalWorkspaces(root.monitor);
+            const workspaces = OverviewState.getNormalWorkspaces(root.monitor).filter(w => !w.name.startsWith("special:"));
             if (workspaces.length > 0) {
                 const curIdx = workspaces.findIndex(w => w.id === Hypr.focusedWorkspace?.id);
                 if (curIdx > 0) {
@@ -39,7 +39,7 @@ Item {
     Keys.onRightPressed: event => {
         event.accepted = true;
         if (OverviewState.activeTab === 0) {
-            const workspaces = OverviewState.getNormalWorkspaces(root.monitor);
+            const workspaces = OverviewState.getNormalWorkspaces(root.monitor).filter(w => !w.name.startsWith("special:"));
             if (workspaces.length > 0) {
                 const curIdx = workspaces.findIndex(w => w.id === Hypr.focusedWorkspace?.id);
                 if (curIdx >= 0 && curIdx < workspaces.length - 1) {

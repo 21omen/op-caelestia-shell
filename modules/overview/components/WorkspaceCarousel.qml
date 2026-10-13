@@ -88,7 +88,7 @@ Item {
                         monitor: root.monitor
 
                         onClicked: {
-                            OverviewState.focusWorkspace(modelData.id, () => root.closeRequested());
+                            OverviewState.activateWorkspace(modelData, () => root.closeRequested());
                         }
                     }
                 }
