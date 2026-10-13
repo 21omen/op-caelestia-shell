@@ -17,6 +17,7 @@ Item {
 
     // Centered Segmented Navigation Tabs
     SegmentedNav {
+        visible: false
         id: segmentedNav
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
@@ -25,6 +26,7 @@ Item {
 
     // Top Right Close Pill Button
     StyledRect {
+        visible: false
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: Tokens.padding.large

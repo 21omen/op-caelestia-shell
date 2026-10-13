@@ -76,6 +76,7 @@ Item {
         // 2. Bottom Footer (Keys & Gestures)
         NavigationFooter {
             id: footer
+            visible: false
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
@@ -94,7 +95,8 @@ Item {
 
             // Tab 0: Workspaces Carousel
             WorkspaceCarousel {
-                anchors.centerIn: parent
+                anchors.top: parent.top
+                anchors.topMargin: Tokens.padding.extraLarge
                 width: parent.width
                 monitor: root.monitor
                 visible: OverviewState.activeTab === 0
@@ -106,7 +108,8 @@ Item {
 
             // Tab 1: Special Scratchpads Carousel
             SpecialCarousel {
-                anchors.centerIn: parent
+                anchors.top: parent.top
+                anchors.topMargin: Tokens.padding.extraLarge
                 width: parent.width
                 monitor: root.monitor
                 visible: OverviewState.activeTab === 1
@@ -118,7 +121,8 @@ Item {
 
             // Tab 2: All Windows Grid
             AllWindowsGrid {
-                anchors.centerIn: parent
+                anchors.top: parent.top
+                anchors.topMargin: Tokens.padding.extraLarge
                 width: parent.width
                 monitor: root.monitor
                 visible: OverviewState.activeTab === 2
