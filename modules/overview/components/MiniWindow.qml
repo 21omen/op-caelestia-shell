@@ -46,7 +46,6 @@ Item {
     Behavior on height { Anim {} }
 
     // Drag support
-    Drag.active: dragArea.drag.active
     Drag.source: root.modelData
     Drag.hotSpot.x: width / 2
     Drag.hotSpot.y: height / 2
@@ -157,7 +156,12 @@ Item {
 
             drag.onActiveChanged: {
                 if (drag.active) {
-                    root.parent.parent.Drag.start();
+                    root.Drag.start();
+                } else {
+                    // Deliver the drop to the card under the cursor, then snap back into place
+                    root.Drag.drop();
+                    root.x = Qt.binding(() => root.targetX);
+                    root.y = Qt.binding(() => root.targetY);
                 }
             }
 
@@ -165,7 +169,7 @@ Item {
                 if (mouse.button === Qt.MiddleButton) {
                     OverviewState.closeWindow(root.modelData);
                 } else if (mouse.button === Qt.LeftButton) {
-                    OverviewState.focusWindow(root.modelData);
+                    OverviewState.focusWindow(root.modelData, () => OverviewState.closeOverview());
                 }
             }
         }

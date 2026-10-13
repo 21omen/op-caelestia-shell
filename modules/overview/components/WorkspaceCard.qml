@@ -149,8 +149,9 @@ Item {
         Behavior on border.color { CAnim {} }
         Behavior on border.width { Anim {} }
 
-        // Curved Content Wrapper
+        // Curved Content Wrapper (above the card's StateLayer so mini windows receive clicks and drags)
         ClippingWrapperRectangle {
+            z: 1
             anchors.fill: parent
             anchors.margins: 1
             color: "transparent"

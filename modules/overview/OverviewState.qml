@@ -15,6 +15,8 @@ Singleton {
     property int selectedCardIndex: 0
     property int selectedWindowIndex: 0
 
+    signal closeOverview
+
     readonly property list<string> tabNames: [
         qsTr("Workspaces"),
         qsTr("Special"),

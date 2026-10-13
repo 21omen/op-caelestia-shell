@@ -18,6 +18,13 @@ Item {
 
     focus: true
 
+    Connections {
+        target: OverviewState
+        function onCloseOverview(): void {
+            root.closeRequested();
+        }
+    }
+
     Keys.onEscapePressed: event => {
         event.accepted = true;
         root.closeRequested();
