@@ -7,6 +7,7 @@ import Quickshell
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
 import Caelestia.Config
+import Caelestia.I18n
 import qs.components
 import qs.components.containers
 import qs.components.controls
@@ -45,11 +46,12 @@ Item {
         id: layout
 
         anchors.left: parent.left
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         spacing: Tokens.spacing.medium
 
         StyledText {
-            text: qsTr("Output device")
+            text: Tr.trCtx("Output device", "audio output device")
             font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
         }
 
@@ -61,6 +63,7 @@ Item {
 
                 required property PwNode modelData
 
+                Layout.fillWidth: true
                 ButtonGroup.group: sinks
                 checked: Audio.sink?.id === modelData.id
                 onClicked: Audio.setAudioSink(modelData)
@@ -70,7 +73,7 @@ Item {
 
         StyledText {
             Layout.topMargin: Tokens.spacing.medium
-            text: qsTr("Input device")
+            text: Tr.trCtx("Input device", "audio input device")
             font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
         }
 
@@ -80,6 +83,7 @@ Item {
             StyledRadioButton {
                 required property PwNode modelData
 
+                Layout.fillWidth: true
                 ButtonGroup.group: sources
                 checked: Audio.source?.id === modelData.id
                 onClicked: Audio.setAudioSource(modelData)
@@ -101,7 +105,7 @@ Item {
 
             StyledText {
                 Layout.fillWidth: true
-                text: qsTr("Volume (%1)").arg(Audio.muted ? qsTr("Muted") : `${Math.round(Audio.volume * 100)}%`)
+                text: Audio.muted ? Tr.tr("Volume (muted)") : Tr.tr("Volume (%1%)").arg(Math.round(Audio.volume * 100))
                 font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
             }
         }
@@ -495,7 +499,7 @@ Item {
             inactiveColour: Colours.palette.m3primaryContainer
             inactiveOnColour: Colours.palette.m3onPrimaryContainer
             verticalPadding: Tokens.padding.extraSmall
-            text: qsTr("Open settings")
+            text: Tr.tr("Open settings")
             icon: "settings"
 
             onClicked: root.popouts.detachRequested("audio")

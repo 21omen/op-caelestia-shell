@@ -1,20 +1,18 @@
 #pragma once
 
-#include "configobject.hpp"
-
-#include <qdir.h>
 #include <qstandardpaths.h>
 #include <qstring.h>
+
+#include "settings/objectnode.hpp"
+#include "common.hpp"
 
 namespace caelestia::config {
 
 using Qt::StringLiterals::operator""_s;
 
-class UserPaths : public ConfigObject {
-    Q_OBJECT
-    QML_ANONYMOUS
+class UserPaths : public settings::ObjectNode {
+    CONFIG_NODE(UserPaths, settings::ObjectNode)
 
-    Q_PROPERTY(QString themeName READ themeName WRITE set_themeName NOTIFY themeNameChanged)
     Q_PROPERTY(QString sessionGif READ sessionGif NOTIFY themeNameChanged)
     Q_PROPERTY(QString mediaGif READ mediaGif NOTIFY themeNameChanged)
     Q_PROPERTY(QString lockGif READ lockGif NOTIFY themeNameChanged)
@@ -27,51 +25,33 @@ class UserPaths : public ConfigObject {
         QString, lyricsDir, QStandardPaths::writableLocation(QStandardPaths::MusicLocation) + u"/Lyrics/"_s)
     CONFIG_PROPERTY(QString, noNotifsPic, u"root:/assets/dino.png"_s)
     CONFIG_PROPERTY(QString, lockNoNotifsPic, u"root:/assets/dino.png"_s)
+    CONFIG_PROPERTY(QString, themeName, u"Shinchan"_s)
 
 public:
-    explicit UserPaths(QObject* parent = nullptr)
-        : ConfigObject(parent) {}
-
-    [[nodiscard]] QString themeName() const {
-        return m_themeName;
-    }
-
-    void set_themeName(const QString& val) {
-        if (ConfigObject::updateMember(m_themeName, val)) {
-            markPropertyLoaded(QStringLiteral("themeName"));
-            Q_EMIT themeNameChanged();
-            notifyPropertyChanged(QStringLiteral("themeName"), QVariant::fromValue(m_themeName));
-        }
-    }
-
     [[nodiscard]] QString sessionGif() const {
-        return themeAsset(QStringLiteral("session.gif"));
+        return themeAsset(u"session.gif"_s);
     }
 
     [[nodiscard]] QString mediaGif() const {
-        return themeAsset(QStringLiteral("media.gif"));
+        return themeAsset(u"media.gif"_s);
     }
 
     [[nodiscard]] QString lockGif() const {
-        return themeAsset(QStringLiteral("lock.gif"));
+        return themeAsset(u"lock.gif"_s);
     }
 
     [[nodiscard]] QString notifBg() const {
-        return themeAsset(QStringLiteral("notif.png"));
+        return themeAsset(u"notif.png"_s);
     }
 
     [[nodiscard]] QString defaultWall() const {
-        return themeAsset(QStringLiteral("wallpaper.jpg"));
+        return themeAsset(u"wallpaper.jpg"_s);
     }
-
-    Q_SIGNAL void themeNameChanged();
 
 private:
     [[nodiscard]] QString themeAsset(const QString& fileName) const {
         return u"root:/assets/themes/"_s + m_themeName + u"/"_s + fileName;
     }
-
-    QString m_themeName = u"Shinchan"_s;
 };
 
 } // namespace caelestia::config

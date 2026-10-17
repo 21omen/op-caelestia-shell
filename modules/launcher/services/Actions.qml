@@ -4,6 +4,7 @@ import ".."
 import QtQuick
 import Quickshell
 import Caelestia.Config
+import Caelestia.I18n
 import Caelestia.Services
 import qs.services
 import qs.utils
@@ -33,9 +34,10 @@ Searcher {
         id: variants
 
         model: {
-            const actions = GlobalConfig.launcher.actions;
+            const enableDangerous = GlobalConfig.launcher.enableDangerousActions;
+            const actions = GlobalConfig.launcher.actions.values;
             const allActions = root.hasAutocomplete(actions, "theme") ? actions : [...actions, root.themeAction];
-            return allActions.filter(a => (a.enabled ?? true) && (GlobalConfig.launcher.enableDangerousActions || !(a.dangerous ?? false)));
+            return allActions.filter(a => (a.enabled ?? true) && (enableDangerous || !(a.dangerous ?? false)));
         }
 
         Action {}
@@ -43,8 +45,8 @@ Searcher {
 
     component Action: QtObject {
         required property var modelData
-        readonly property string name: modelData.name ?? qsTr("Unnamed")
-        readonly property string desc: modelData.description ?? qsTr("No description")
+        readonly property string name: modelData.name ? Tr.trMarked(modelData.name) : Tr.trCtx("Unnamed", "launcher action with no name")
+        readonly property string desc: modelData.description ? Tr.trMarked(modelData.description) : Tr.trCtx("No description", "launcher action with no description")
         readonly property string icon: modelData.icon ?? "help_outline"
         readonly property list<string> command: modelData.command ?? []
         readonly property bool enabled: modelData.enabled ?? true

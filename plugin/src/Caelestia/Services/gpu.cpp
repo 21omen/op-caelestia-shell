@@ -1,41 +1,31 @@
 #include "gpu.hpp"
 
-#include "../Config/config.hpp"
-#include "../Config/serviceconfig.hpp"
-#include "sensorslib.hpp"
-
-#include <algorithm>
-#include <cmath>
-#include <optional>
 #include <qdir.h>
 #include <qdiriterator.h>
 #include <qfile.h>
 #include <qregularexpression.h>
-#include <qset.h>
+
+#include "config/rootnodes.hpp"
+#include "config/serviceconfig.hpp"
+#include "sensorslib.hpp"
 
 namespace caelestia::services {
 
+using Qt::StringLiterals::operator""_s;
+
 namespace {
 
-constexpr const char* kTypeDetectScript =
-    "if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then echo NVIDIA;"
-    " else for f in /sys/class/drm/card*/gt/gt*/rc6_residency_ms /sys/class/drm/card*/gt/gt*/rps_cur_freq_mhz;"
-    " do [ -r \"$f\" ] && echo INTEL && exit; done;"
-    " for f in /sys/class/drm/card*/device/vendor; do [ -r \"$f\" ] && [ \"$(cat \"$f\")\" = \"0x8086\" ] && echo INTEL && exit; done;"
-    " if ls /sys/class/drm/card*/device/gpu_busy_percent 2>/dev/null | grep -q .; then echo GENERIC; exit; fi;"
-    " echo NONE; fi";
-
 QStringList gpuBusyFiles() {
-    static const QRegularExpression cardRe(QStringLiteral("^card\\d+$"));
+    static const QRegularExpression k_cardRe(u"^card\\d+$"_s);
 
     QStringList files;
-    QDirIterator it(QStringLiteral("/sys/class/drm"), QDir::Dirs | QDir::NoDotAndDotDot);
+    QDirIterator it(u"/sys/class/drm"_s, QDir::Dirs | QDir::NoDotAndDotDot);
     while (it.hasNext()) {
         const QString path = it.next();
-        if (!cardRe.match(it.fileName()).hasMatch()) {
+        if (!k_cardRe.match(it.fileName()).hasMatch()) {
             continue;
         }
-        const QString busy = path + QStringLiteral("/device/gpu_busy_percent");
+        const QString busy = path + u"/device/gpu_busy_percent"_s;
         if (QFile::exists(busy)) {
             files << busy;
         }
@@ -44,29 +34,28 @@ QStringList gpuBusyFiles() {
 }
 
 QString cleanName(QString s) {
-    static const QRegularExpression noise(
-        QStringLiteral("\\(R\\)|\\(TM\\)|Graphics"), QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression spaces(QStringLiteral("\\s+"));
-    s.replace(noise, QString());
-    s.replace(spaces, QStringLiteral(" "));
+    static const QRegularExpression k_noise(u"\\(R\\)|\\(TM\\)|Graphics"_s, QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression k_spaces(u"\\s+"_s);
+    s.replace(k_noise, {});
+    s.replace(k_spaces, u" "_s);
     return s.trimmed();
 }
 
 QString parseNvidiaName(const QByteArray& out) {
-    const QString first = QString::fromUtf8(out).split('\n').value(0).trimmed();
+    const QString first = QString::fromUtf8(out).split(u'\n').value(0).trimmed();
     return first.isEmpty() ? QString() : cleanName(first);
 }
 
 QString parseGlxinfoName(const QByteArray& out) {
-    const QStringList lines = QString::fromUtf8(out).split('\n');
+    const QStringList lines = QString::fromUtf8(out).split(u'\n');
     for (const QString& line : lines) {
-        const qsizetype idx = line.indexOf(QStringLiteral("Device:"));
+        const qsizetype idx = line.indexOf(u"Device:"_s);
         if (idx < 0) {
             continue;
         }
 
         QString rest = line.mid(idx + 7);
-        const qsizetype paren = rest.indexOf('(');
+        const qsizetype paren = rest.indexOf(u'(');
         if (paren >= 0) {
             rest = rest.left(paren);
         }
@@ -77,41 +66,40 @@ QString parseGlxinfoName(const QByteArray& out) {
         }
     }
 
-    return QString();
+    return {};
 }
 
 QString parseLspciName(const QByteArray& out) {
-    static const QRegularExpression lineRe(
-        QStringLiteral("vga|3d controller|display"), QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression k_lineRe(u"vga|3d controller|display"_s, QRegularExpression::CaseInsensitiveOption);
 
-    const QStringList lines = QString::fromUtf8(out).split('\n');
+    const QStringList lines = QString::fromUtf8(out).split(u'\n');
     QString match;
     for (const QString& line : lines) {
-        if (lineRe.match(line).hasMatch()) {
+        if (k_lineRe.match(line).hasMatch()) {
             match = line;
             break;
         }
     }
 
     if (match.isEmpty()) {
-        return QString();
+        return {};
     }
 
-    static const QRegularExpression bracketRe(QStringLiteral("\\[([^\\]]+)\\][^\\[]*$"));
-    const auto bracket = bracketRe.match(match);
+    static const QRegularExpression k_bracketRe(u"\\[([^\\]]+)\\][^\\[]*$"_s);
+    const auto bracket = k_bracketRe.match(match);
     if (bracket.hasMatch()) {
         return cleanName(bracket.captured(1));
     }
 
     // Split on a colon followed by whitespace so the PCI slot ("00:02.0") is not
     // mistaken for the class/name separator ("controller: Device").
-    static const QRegularExpression colonRe(QStringLiteral(":\\s+(.+)"));
-    const auto colon = colonRe.match(match);
+    static const QRegularExpression k_colonRe(u":\\s+(.+)"_s);
+    const auto colon = k_colonRe.match(match);
     if (colon.hasMatch()) {
         return cleanName(colon.captured(1));
     }
 
-    return QString();
+    return {};
 }
 
 struct NameSource {
@@ -123,66 +111,31 @@ struct NameSource {
 // Name probes in priority order; the first non-empty result wins. Which of them run
 // depends on the resolved type.
 const std::array<NameSource, 3>& nameSources() {
-    static const std::array<NameSource, 3> sources = { {
-        { QStringLiteral("nvidia-smi"), { QStringLiteral("--query-gpu=name"), QStringLiteral("--format=csv,noheader") },
-            &parseNvidiaName },
-        { QStringLiteral("glxinfo"), { QStringLiteral("-B") }, &parseGlxinfoName },
-        { QStringLiteral("lspci"), {}, &parseLspciName },
-    } };
-    return sources;
+    static const std::array<NameSource, 3> k_sources = {
+        {
+            {
+                .program = u"nvidia-smi"_s,
+                .args = { u"--query-gpu=name"_s, u"--format=csv,noheader"_s },
+                .parse = &parseNvidiaName,
+            },
+            {
+                .program = u"glxinfo"_s,
+                .args = { u"-B"_s },
+                .parse = &parseGlxinfoName,
+            },
+            {
+                .program = u"lspci"_s,
+                .args = {},
+                .parse = &parseLspciName,
+            },
+        },
+    };
+    return k_sources;
 }
 
 // Indices within nameSources(): nvidia-smi, then the driver-agnostic probes.
-constexpr int kNvidiaSource = 0;
-constexpr int kFirstGenericSource = 1;
-
-std::optional<qreal> readRealFile(const QString& path) {
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return std::nullopt;
-    }
-
-    bool ok = false;
-    const qreal value = f.readAll().trimmed().toDouble(&ok);
-    return ok ? std::optional<qreal>(value) : std::nullopt;
-}
-
-std::optional<qint64> readIntFile(const QString& path) {
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return std::nullopt;
-    }
-
-    bool ok = false;
-    const qint64 value = f.readAll().trimmed().toLongLong(&ok);
-    return ok ? std::optional<qint64>(value) : std::nullopt;
-}
-
-QStringList intelGtDirs() {
-    QStringList dirs;
-    const QStringList cards =
-        QDir(QStringLiteral("/sys/class/drm"))
-            .entryList(QStringList() << QStringLiteral("card*"), QDir::Dirs | QDir::NoDotAndDotDot);
-
-    for (const QString& card : cards) {
-        const QDir gtRoot(QStringLiteral("/sys/class/drm/%1/gt").arg(card));
-        if (!gtRoot.exists()) {
-            continue;
-        }
-
-        const QStringList gts = gtRoot.entryList(QStringList() << QStringLiteral("gt*"), QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QString& gt : gts) {
-            dirs.append(gtRoot.absoluteFilePath(gt));
-        }
-
-        if (QFile::exists(gtRoot.absoluteFilePath(QStringLiteral("rc6_residency_ms"))) ||
-            QFile::exists(gtRoot.absoluteFilePath(QStringLiteral("rps_cur_freq_mhz")))) {
-            dirs.append(gtRoot.absolutePath());
-        }
-    }
-
-    return dirs;
-}
+constexpr int k_nvidiaSource = 0;
+constexpr int k_firstGenericSource = 1;
 
 } // namespace
 
@@ -190,10 +143,10 @@ Gpu::Gpu(QObject* parent)
     : TickingService(parent) {
     m_busyFiles = gpuBusyFiles();
 
-    auto* svc = caelestia::config::GlobalConfig::instance()->services();
-    m_userType = parseType(svc->gpuType());
+    const auto* svc = caelestia::config::ConfigSingleton::instance()->services();
+    m_userType = svc->gpuType();
     QObject::connect(svc, &caelestia::config::ServiceConfig::gpuTypeChanged, this, [this, svc] {
-        const Type value = parseType(svc->gpuType());
+        const GpuType value = svc->gpuType();
         if (value == m_userType) {
             return;
         }
@@ -204,12 +157,16 @@ Gpu::Gpu(QObject* parent)
     resolveGpu();
 }
 
-Gpu::Type Gpu::type() const {
+GpuType Gpu::type() const {
     return m_type;
 }
 
 QString Gpu::name() const {
     return m_name;
+}
+
+bool Gpu::detecting() const {
+    return m_detecting;
 }
 
 qreal Gpu::percentage() const {
@@ -220,12 +177,12 @@ qreal Gpu::temperature() const {
     return m_temperature;
 }
 
-void Gpu::setType(Type value) {
+void Gpu::setType(GpuType value) {
     if (value == m_type) {
         return;
     }
     m_type = value;
-    if (m_type == None) {
+    if (m_type == GpuType::None) {
         resetUsage();
     }
     emit typeChanged();
@@ -239,14 +196,19 @@ void Gpu::setName(QString value) {
     emit nameChanged();
 }
 
+void Gpu::setDetecting(bool value) {
+    if (value == m_detecting) {
+        return;
+    }
+    m_detecting = value;
+    emit detectingChanged();
+}
+
 void Gpu::tick() {
-    if (m_type == Generic) {
+    if (m_type == GpuType::Generic) {
         readGenericUsage();
         readGpuTemperature();
-    } else if (m_type == Intel) {
-        readIntelUsage();
-        readGpuTemperature();
-    } else if (m_type == Nvidia) {
+    } else if (m_type == GpuType::Nvidia) {
         startNvidiaUsage();
     } else {
         resetUsage();
@@ -257,21 +219,23 @@ void Gpu::resolveGpu() {
     // Supersede any chain still in flight so its callbacks cannot write stale state
     const int generation = ++m_generation;
 
-    if (m_userType != Auto) {
+    if (m_userType != GpuType::Auto) {
         setType(m_userType);
     }
 
-    if (m_userType == None) {
-        setName(tr("None"));
+    if (m_userType == GpuType::None) {
+        setName({});
+        setDetecting(false);
         return;
     }
 
-    setName(tr("Detecting GPU..."));
-    tryNameSource(m_userType == Generic || m_userType == Intel ? kFirstGenericSource : kNvidiaSource, generation);
+    setName({});
+    setDetecting(true);
+    tryNameSource(m_userType == GpuType::Generic ? k_firstGenericSource : k_nvidiaSource, generation);
 }
 
 int Gpu::probeEnd() const {
-    return m_userType == Nvidia ? kFirstGenericSource : static_cast<int>(nameSources().size());
+    return m_userType == GpuType::Nvidia ? k_firstGenericSource : static_cast<int>(nameSources().size());
 }
 
 void Gpu::tryNameSource(int index, int generation) {
@@ -288,22 +252,22 @@ void Gpu::finishNameSource(int index, int generation, QString name) {
 
     // Under Auto the NVIDIA name probe doubles as the type probe: a non-empty result
     // means an NVIDIA GPU is present and queryable.
-    if (m_userType == Auto && index == kNvidiaSource) {
-        if (!name.isEmpty()) {
-            setType(Nvidia);
-        } else if (!intelGtDirs().isEmpty()) {
-            setType(Intel);
-        } else {
-            setType(m_busyFiles.isEmpty() ? None : Generic);
-        }
-        if (m_type == None) {
-            setName(tr("None"));
+    if (m_userType == GpuType::Auto && index == k_nvidiaSource) {
+        if (!name.isEmpty())
+            setType(GpuType::Nvidia);
+        else
+            setType(m_busyFiles.isEmpty() ? GpuType::None : GpuType::Generic);
+
+        if (m_type == GpuType::None) {
+            setName({});
+            setDetecting(false);
             return;
         }
     }
 
     if (!name.isEmpty()) {
         setName(std::move(name));
+        setDetecting(false);
         return;
     }
 
@@ -312,7 +276,8 @@ void Gpu::finishNameSource(int index, int generation, QString name) {
     if (next < probeEnd()) {
         tryNameSource(next, generation);
     } else {
-        setName(tr("None"));
+        setName({});
+        setDetecting(false);
     }
 }
 
@@ -364,87 +329,14 @@ void Gpu::readGenericUsage() {
     }
 }
 
-void Gpu::readIntelUsage() {
-    const QStringList gtDirs = intelGtDirs();
-    const qint64 elapsedMs = m_intelUsageTimer.isValid() ? m_intelUsageTimer.elapsed() : 0;
-    qreal sum = 0.0;
-    int count = 0;
-    QSet<QString> seen;
-
-    for (const QString& gtDir : gtDirs) {
-        const QString path = gtDir + QStringLiteral("/rc6_residency_ms");
-        const auto current = readIntFile(path);
-        if (!current) {
-            continue;
-        }
-
-        seen.insert(path);
-        const auto lastIt = m_lastIntelRc6Residency.constFind(path);
-        if (lastIt != m_lastIntelRc6Residency.constEnd() && elapsedMs > 0) {
-            const qint64 delta = std::max<qint64>(0, *current - *lastIt);
-            const qreal idle = std::clamp(static_cast<qreal>(delta) / static_cast<qreal>(elapsedMs), 0.0, 1.0);
-            sum += 1.0 - idle;
-            ++count;
-        }
-        m_lastIntelRc6Residency.insert(path, *current);
-    }
-
-    const auto keys = m_lastIntelRc6Residency.keys();
-    for (const QString& key : keys) {
-        if (!seen.contains(key)) {
-            m_lastIntelRc6Residency.remove(key);
-        }
-    }
-
-    m_intelUsageTimer.restart();
-
-    const qreal newPerc = count > 0 ? sum / static_cast<qreal>(count) : readIntelFrequencyUsage();
-    if (std::abs(newPerc - m_percentage) > 0.0001) {
-        m_percentage = newPerc;
-        Q_EMIT percentageChanged();
-    }
-}
-
-qreal Gpu::readIntelFrequencyUsage() const {
-    qreal sum = 0.0;
-    int count = 0;
-
-    for (const QString& gtDir : intelGtDirs()) {
-        auto cur = readRealFile(gtDir + QStringLiteral("/rps_act_freq_mhz"));
-        if (!cur) {
-            cur = readRealFile(gtDir + QStringLiteral("/rps_cur_freq_mhz"));
-        }
-
-        auto min = readRealFile(gtDir + QStringLiteral("/rps_min_freq_mhz"));
-        if (!min) {
-            min = readRealFile(gtDir + QStringLiteral("/rps_RPn_freq_mhz"));
-        }
-
-        auto max = readRealFile(gtDir + QStringLiteral("/rps_max_freq_mhz"));
-        if (!max) {
-            max = readRealFile(gtDir + QStringLiteral("/rps_RP0_freq_mhz"));
-        }
-
-        if (!cur || !min || !max || *max <= *min) {
-            continue;
-        }
-
-        sum += std::clamp((*cur - *min) / (*max - *min), 0.0, 1.0);
-        ++count;
-    }
-
-    return count > 0 ? sum / static_cast<qreal>(count) : 0.0;
-}
-
 void Gpu::startNvidiaUsage() {
     if (m_nvidiaQuerying) {
         return;
     }
     m_nvidiaQuerying = true;
     const int generation = m_generation;
-    runProcess(QStringLiteral("nvidia-smi"),
-        { QStringLiteral("--query-gpu=utilization.gpu,temperature.gpu"),
-            QStringLiteral("--format=csv,noheader,nounits") },
+    runProcess(u"nvidia-smi"_s,
+        { u"--query-gpu=utilization.gpu,temperature.gpu"_s, u"--format=csv,noheader,nounits"_s },
         [this, generation](const QByteArray& out) {
             m_nvidiaQuerying = false;
 
@@ -473,12 +365,7 @@ void Gpu::startNvidiaUsage() {
 }
 
 void Gpu::readGpuTemperature() {
-    auto t = sensorslib::gpuPciAverageTemp();
-    if (!t && type() == Intel) {
-        // Intel integrated GPUs usually share the CPU package thermal zone and
-        // often do not expose a separate GPU hwmon sensor.
-        t = sensorslib::cpuPackageTemp();
-    }
+    const auto t = sensorslib::gpuPciAverageTemp();
     const qreal newTemp = t.value_or(0.0);
     if (std::abs(newTemp - m_temperature) > 0.05) {
         m_temperature = newTemp;
@@ -495,23 +382,6 @@ void Gpu::resetUsage() {
         m_temperature = 0.0;
         emit temperatureChanged();
     }
-}
-
-Gpu::Type Gpu::parseType(const QString& s) {
-    const QString u = s.trimmed().toUpper();
-    if (u.isEmpty()) {
-        return Auto;
-    }
-    if (u == QStringLiteral("NVIDIA")) {
-        return Nvidia;
-    }
-    if (u == QStringLiteral("INTEL")) {
-        return Intel;
-    }
-    if (u == QStringLiteral("GENERIC")) {
-        return Generic;
-    }
-    return None;
 }
 
 } // namespace caelestia::services

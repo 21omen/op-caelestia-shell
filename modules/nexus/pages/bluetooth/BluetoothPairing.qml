@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 import Caelestia.Config
+import Caelestia.I18n
 import qs.components
 import qs.components.controls
 import qs.services
@@ -14,14 +15,14 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    readonly property BluetoothAdapter adapter: Bluetooth.defaultAdapter // qmllint disable unresolved-type
+    readonly property BluetoothAdapter adapter: Bluetooth.defaultAdapter
 
     function setScan(on: bool): void {
         if (adapter?.enabled)
             adapter.discovering = on;
     }
 
-    title: qsTr("Pair new device")
+    title: Tr.tr("Pair new device")
     isSubPage: true
 
     Component.onCompleted: setScan(true)
@@ -142,14 +143,14 @@ PageBase {
 
                             StyledText {
                                 Layout.fillWidth: true
-                                text: newDevice.modelData?.name || qsTr("Unknown device")
+                                text: newDevice.modelData?.name || Tr.tr("Unknown device")
                                 font: Tokens.font.body.small
                                 elide: Text.ElideRight
                             }
 
                             StyledText {
                                 Layout.fillWidth: true
-                                text: newDevice.modelData?.pairing ? qsTr("Pairing...") : (newDevice.modelData?.address ?? "")
+                                text: newDevice.modelData?.pairing ? Tr.tr("Pairing...") : (newDevice.modelData?.address ?? "")
                                 color: Colours.palette.m3outline
                                 font: Tokens.font.label.small
                                 elide: Text.ElideRight

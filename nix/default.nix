@@ -35,7 +35,7 @@
 }: let
   version = "1.0.0";
 
-  qs = quickshell.withModules [qt6.qtimageformats];
+  qs = quickshell.withModules [qt6.qtimageformats m3shapes];
 
   runtimeDeps =
     [
@@ -67,9 +67,6 @@
     (lib.cmakeFeature "GIT_REVISION" rev)
     (lib.cmakeFeature "DISTRIBUTOR" "nix-flake")
   ];
-
-  # The build sandbox has no network access so add it as a flake input instead
-  m3shapesFlag = lib.cmakeFeature "FETCHCONTENT_SOURCE_DIR_M3SHAPES_EXTERNAL" "${m3shapes}";
 
   extras = stdenv.mkDerivation {
     inherit cmakeBuildType;
@@ -108,27 +105,6 @@
       ]
       ++ cmakeVersionFlags;
   };
-
-  m3shapesModule = stdenv.mkDerivation {
-    inherit cmakeBuildType;
-    name = "caelestia-m3shapes${lib.optionalString debug "-debug"}";
-    src = lib.fileset.toSource {
-      root = ./..;
-      fileset = ./../CMakeLists.txt;
-    };
-
-    nativeBuildInputs = [cmake ninja];
-    buildInputs = [qt6.qtbase qt6.qtdeclarative];
-
-    dontWrapQtApps = true;
-    cmakeFlags =
-      [
-        (lib.cmakeFeature "ENABLE_MODULES" "m3shapes")
-        (lib.cmakeFeature "INSTALL_QMLDIR" qt6.qtbase.qtQmlPrefix)
-        m3shapesFlag
-      ]
-      ++ cmakeVersionFlags;
-  };
 in
   stdenv.mkDerivation {
     inherit version cmakeBuildType;
@@ -136,7 +112,7 @@ in
     src = ./..;
 
     nativeBuildInputs = [cmake ninja makeWrapper qt6.wrapQtAppsHook];
-    buildInputs = [qs extras plugin m3shapesModule xkeyboard-config qt6.qtbase];
+    buildInputs = [qs extras plugin xkeyboard-config qt6.qtbase];
     propagatedBuildInputs = runtimeDeps;
 
     cmakeFlags =
@@ -157,18 +133,18 @@ in
 
     postInstall = ''
       makeWrapper ${qs}/bin/qs $out/bin/caelestia-shell \
-      	--prefix PATH : "${lib.makeBinPath runtimeDeps}" \
-      	--set FONTCONFIG_FILE "${fontconfig}" \
-      	--set CAELESTIA_LIB_DIR ${extras}/lib \
+        --prefix PATH : "${lib.makeBinPath runtimeDeps}" \
+        --set FONTCONFIG_FILE "${fontconfig}" \
+        --set CAELESTIA_LIB_DIR ${extras}/lib \
         --set CAELESTIA_XKB_RULES_PATH ${xkeyboard-config}/share/xkeyboard-config-2/rules/base.lst \
-      	--add-flags "-p $out/share/caelestia-shell"
+        --add-flags "-p $out/share/caelestia-shell"
 
       mkdir -p $out/lib
       ln -s ${extras}/lib/* $out/lib/
     '';
 
     passthru = {
-      inherit plugin extras m3shapesModule;
+      inherit plugin extras;
     };
 
     meta = {

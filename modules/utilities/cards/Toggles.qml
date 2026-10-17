@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell.Bluetooth
 import Caelestia.Components
 import Caelestia.Config
+import Caelestia.I18n
 import qs.components
 import qs.components.controls
 import qs.services
@@ -52,7 +53,7 @@ StyledRect {
         spacing: Tokens.spacing.medium
 
         StyledText {
-            text: qsTr("Quick Toggles")
+            text: Tr.tr("Quick toggles")
             font: Tokens.font.body.medium
         }
 
@@ -90,9 +91,9 @@ StyledRect {
                     roleValue: "bluetooth"
                     delegate: Toggle {
                         icon: "bluetooth"
-                        checked: Bluetooth.defaultAdapter?.enabled ?? false // qmllint disable unresolved-type
+                        checked: Bluetooth.defaultAdapter?.enabled ?? false
                         onClicked: {
-                            const adapter = Bluetooth.defaultAdapter; // qmllint disable unresolved-type
+                            const adapter = Bluetooth.defaultAdapter;
                             if (adapter)
                                 adapter.enabled = !adapter.enabled;
                         }

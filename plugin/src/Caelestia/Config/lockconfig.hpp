@@ -1,6 +1,7 @@
 #pragma once
 
-#include "configobject.hpp"
+#include "settings/objectnode.hpp"
+#include "common.hpp"
 
 #include <qstring.h>
 
@@ -8,9 +9,8 @@ namespace caelestia::config {
 
 using Qt::StringLiterals::operator""_s;
 
-class LockConfig : public ConfigObject {
-    Q_OBJECT
-    QML_ANONYMOUS
+class LockConfig : public settings::ObjectNode {
+    CONFIG_NODE(LockConfig, settings::ObjectNode)
 
     CONFIG_PROPERTY(bool, enabled, true)
     CONFIG_PROPERTY(bool, useWallpaper, false)
@@ -24,10 +24,7 @@ class LockConfig : public ConfigObject {
     CONFIG_GLOBAL_PROPERTY(bool, enablePattern, true)
     CONFIG_GLOBAL_PROPERTY(QString, pattern, u"74159"_s)
     CONFIG_PROPERTY(bool, hideNotifs, false)
-
-public:
-    explicit LockConfig(QObject* parent = nullptr)
-        : ConfigObject(parent) {}
+    CONFIG_GLOBAL_PROPERTY(bool, enableSessionControls, false)
 };
 
 } // namespace caelestia::config
