@@ -36,7 +36,6 @@ StyledClippingRect {
         visible: root.showGif
 
         source: root.showGif ? root.gifSource : ""
-        sourceSize.width: width * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
         playing: root.visible && root.showGif && width > 0 && height > 0
         paused: false
         speed: 1
