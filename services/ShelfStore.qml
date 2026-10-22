@@ -2,6 +2,7 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 
@@ -11,14 +12,25 @@ Singleton {
     property bool dragging: false
     property bool loaded: false
     property bool recheck: false
+    property var dismissed: ({})
+
     readonly property string home: Quickshell.env("HOME")
     readonly property string store: home + "/.local/share/caelestia-shelf"
     readonly property string thumbDir: home + "/.cache/thumbnails"
     readonly property string ownThumbDir: home + "/.cache/caelestia-shelf"
-    readonly property alias entries: shelf
+    readonly property string screenshotDir: home + "/Bilder/Screenshots"
+    readonly property string downloadDir: home + "/Downloads"
+    readonly property int autoLimit: 50
+    readonly property real startTime: Date.now()
 
-    // Prüft je Datei: existiert sie, ist sie ein Ordner, gibt es ein Vorschaubild im Cache.
-    // Aufruf: sh -c SCRIPT sh THUMBDIR pfad hash1 hash2 pfad hash1 hash2 ...
+    readonly property var tabs: [
+        { key: "main", label: "Regal", icon: "inventory_2", empty: "Dateien, Bilder oder Links hierher ziehen" },
+        { key: "screenshots", label: "Screenshots", icon: "screenshot_monitor", empty: "Neue Screenshots erscheinen hier automatisch" },
+        { key: "downloads", label: "Downloads", icon: "download", empty: "Neue Downloads erscheinen hier automatisch" }
+    ]
+
+    // Prüft je Datei: existiert sie, ist sie ein Ordner, gibt es ein Vorschaubild.
+    // Aufruf: sh -c SCRIPT sh THUMBDIR OWNTHUMBDIR pfad hash1 hash2 ...
     readonly property string checkScript: `TD=$1; OD=$2; shift 2
 mkdir -p "$OD"
 while [ $# -ge 3 ]; do
@@ -45,6 +57,10 @@ while [ $# -ge 3 ]; do
   fi
   printf '%s\\t%s\\t%s\\n' "$t" "$th" "$f"
 done`
+
+    function modelFor(key) {
+        return key === "screenshots" ? shotsModel : key === "downloads" ? dlModel : mainModel;
+    }
 
     function decode(s) {
         try { return decodeURIComponent(s); } catch (e) { return s; }
@@ -73,13 +89,21 @@ done`
 
     // --- Speichern / Laden -------------------------------------------------
 
-    function save() {
+    function serialize(m) {
         const items = [];
-        for (let i = 0; i < shelf.count; i++) {
-            const e = shelf.get(i);
+        for (let i = 0; i < m.count; i++) {
+            const e = m.get(i);
             items.push({ kind: e.kind, url: e.url, name: e.name, source: e.source });
         }
-        stateFile.setText(JSON.stringify(items, null, 2));
+        return items;
+    }
+
+    function save() {
+        stateFile.setText(JSON.stringify({
+            main: serialize(mainModel),
+            screenshots: serialize(shotsModel),
+            downloads: serialize(dlModel)
+        }, null, 2));
     }
 
     function load(text) {
@@ -87,9 +111,12 @@ done`
         loaded = true;
         Quickshell.execDetached(["find", store, "-mindepth", "1", "-type", "d", "-empty", "-delete"]);
         try {
-            for (const e of JSON.parse(text))
-                shelf.append(newEntry(e.kind, e.url, e.name, e.source));
-            console.log("shelf: loaded", shelf.count, "entries");
+            const data = JSON.parse(text);
+            const parts = Array.isArray(data) ? { main: data } : data;
+            for (const t of tabs)
+                for (const e of (parts[t.key] ?? []))
+                    modelFor(t.key).append(newEntry(e.kind, e.url, e.name, e.source));
+            console.log("shelf: loaded", mainModel.count, shotsModel.count, dlModel.count, "entries");
         } catch (err) {
             console.log("shelf: could not parse state:", err);
         }
@@ -108,26 +135,36 @@ done`
 
     // --- Einträge ----------------------------------------------------------
 
-    function addEntry(kind, url, name, source) {
-        for (let i = 0; i < shelf.count; i++) {
-            const e = shelf.get(i);
+    function addEntry(kind, url, name, source, key, atTop) {
+        const m = modelFor(key ?? "main");
+        for (let i = 0; i < m.count; i++) {
+            const e = m.get(i);
             if (e.url === url || (source !== "" && e.source === source)) return;
         }
-        shelf.append(newEntry(kind, url, name, source));
-        console.log("shelf: added", kind, url);
+        const entry = newEntry(kind, url, name, source);
+        if (atTop) m.insert(0, entry);
+        else m.append(entry);
+        if (atTop && m.count > autoLimit) m.remove(autoLimit, m.count - autoLimit);
+        console.log("shelf: added", key ?? "main", kind, url);
         save();
         checkFiles();
     }
 
-    function removeAt(i) {
-        const e = shelf.get(i);
+    function removeAt(key, i) {
+        const m = modelFor(key);
+        const e = m.get(i);
         if (e.kind === "file" && isOwn(e.url)) {
             const p = toPath(e.url);
             const dir = p.substring(0, p.lastIndexOf("/"));
             Quickshell.execDetached(dir !== store ? ["rm", "-rf", "--", dir] : ["rm", "--", p]);
             console.log("shelf: deleted own download", dir !== store ? dir : p);
         }
-        shelf.remove(i);
+        if (key !== "main") {
+            const d = dismissed;
+            d[e.url] = true;
+            dismissed = d;
+        }
+        m.remove(i);
         save();
     }
 
@@ -140,8 +177,8 @@ done`
     }
 
     function download(url) {
-        for (let i = 0; i < shelf.count; i++)
-            if (shelf.get(i).source === url) {
+        for (let i = 0; i < mainModel.count; i++)
+            if (mainModel.get(i).source === url) {
                 console.log("shelf: already on shelf", url);
                 return;
             }
@@ -172,6 +209,53 @@ done`
         drop.accept(Qt.CopyAction);
     }
 
+    // --- Automatische Reiter -----------------------------------------------
+    // Beim ersten vollständigen Einlesen merkt sich jeder Watcher die vorhandenen
+    // Dateinamen. Aufgenommen wird nur, was danach neu auftaucht — unabhängig vom
+    // Änderungsdatum (FluxDown setzt z. B. das Datum vom Server).
+
+    function prime(watcher) {
+        const k = {};
+        for (let i = 0; i < watcher.count; i++)
+            k[watcher.get(i, "fileName")] = true;
+        watcher.known = k;
+        watcher.primed = true;
+    }
+
+    function collect(watcher, key, first, last) {
+        if (!watcher.primed) return;
+        for (let i = first; i <= last; i++) {
+            const name = watcher.get(i, "fileName");
+            if (watcher.known[name]) continue;
+            if (name.startsWith(".") || /\.(part|crdownload|tmp|download|fdownloading)$/i.test(name)) continue;
+            watcher.known[name] = true;
+            const url = watcher.get(i, "fileUrl").toString();
+            if (dismissed[url]) continue;
+            addEntry("file", url, name, "", key, true);
+        }
+    }
+
+    component Watcher: FolderListModel {
+        property var known: ({})
+        property bool primed: false
+
+        showDirs: false
+    }
+
+    Watcher {
+        id: shotWatcher
+        folder: "file://" + root.screenshotDir
+        onStatusChanged: if (shotWatcher.status === FolderListModel.Ready && !shotWatcher.primed) root.prime(shotWatcher)
+        onRowsInserted: (parent, first, last) => root.collect(shotWatcher, "screenshots", first, last)
+    }
+
+    Watcher {
+        id: dlWatcher
+        folder: "file://" + root.downloadDir
+        onStatusChanged: if (dlWatcher.status === FolderListModel.Ready && !dlWatcher.primed) root.prime(dlWatcher)
+        onRowsInserted: (parent, first, last) => root.collect(dlWatcher, "downloads", first, last)
+    }
+
     // --- Existenz- und Vorschauprüfung -------------------------------------
 
     function checkFiles() {
@@ -180,12 +264,13 @@ done`
             return;
         }
         const args = [];
-        for (let i = 0; i < shelf.count; i++) {
-            const e = shelf.get(i);
-            if (e.kind !== "file") continue;
-            const p = toPath(e.url);
-            args.push(p, Qt.md5("file://" + encodeURI(p)), Qt.md5("file://" + p));
-        }
+        for (const m of [mainModel, shotsModel, dlModel])
+            for (let i = 0; i < m.count; i++) {
+                const e = m.get(i);
+                if (e.kind !== "file") continue;
+                const p = toPath(e.url);
+                args.push(p, Qt.md5("file://" + encodeURI(p)), Qt.md5("file://" + p));
+            }
         if (args.length === 0) return;
         checker.command = ["sh", "-c", checkScript, "sh", thumbDir, ownThumbDir].concat(args);
         checker.running = true;
@@ -198,22 +283,38 @@ done`
             if (parts.length < 3) continue;
             info[parts.slice(2).join("\t")] = { dir: parts[0] === "d", thumb: parts[1] === "-" ? "" : "file://" + parts[1] };
         }
-        for (let i = 0; i < shelf.count; i++) {
-            const e = shelf.get(i);
-            if (e.kind !== "file") continue;
-            const x = info[toPath(e.url)];
-            shelf.setProperty(i, "available", x !== undefined);
-            if (x) {
-                shelf.setProperty(i, "isDir", x.dir);
-                shelf.setProperty(i, "thumb", x.thumb);
+        for (const m of [mainModel, shotsModel, dlModel])
+            for (let i = 0; i < m.count; i++) {
+                const e = m.get(i);
+                if (e.kind !== "file") continue;
+                const x = info[toPath(e.url)];
+                m.setProperty(i, "available", x !== undefined);
+                if (x) {
+                    m.setProperty(i, "isDir", x.dir);
+                    m.setProperty(i, "thumb", x.thumb);
+                }
             }
-        }
+    }
+
+    // Auto-Reiter spiegeln Ordner: Einträge ohne Datei fliegen raus statt ausgegraut zu bleiben.
+    function pruneAuto() {
+        let removed = false;
+        for (const m of [shotsModel, dlModel])
+            for (let i = m.count - 1; i >= 0; i--)
+                if (!m.get(i).available) {
+                    m.remove(i);
+                    removed = true;
+                }
+        if (removed) save();
     }
 
     Process {
         id: checker
         stdout: StdioCollector {
-            onStreamFinished: root.applyResults(text)
+            onStreamFinished: {
+                root.applyResults(text);
+                root.pruneAuto();
+            }
         }
         onExited: {
             if (root.recheck) {
@@ -223,7 +324,9 @@ done`
         }
     }
 
-    ListModel { id: shelf }
+    ListModel { id: mainModel }
+    ListModel { id: shotsModel }
+    ListModel { id: dlModel }
 
     Component {
         id: downloader

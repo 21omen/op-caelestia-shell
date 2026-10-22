@@ -8,17 +8,104 @@ import qs.services
 Item {
     id: root
 
+    property bool dragOver
+    property string currentTab: "main"
+    readonly property var currentModel: ShelfStore.modelFor(currentTab)
+    readonly property var currentTabInfo: ShelfStore.tabs.find(t => t.key === currentTab) ?? ShelfStore.tabs[0]
+
+    // Nur bei Drags von außen auf „Regal“ springen. Ein eigener Drag aus einem
+    // anderen Reiter würde sonst durch den Listenwechsel seine Quelle zerstören.
+    onDragOverChanged: if (dragOver && !ShelfStore.dragging) currentTab = "main"
+
     implicitWidth: 360
-    implicitHeight: Math.min(Math.max(list.contentHeight + Tokens.padding.large * 2, 280), 640)
+    implicitHeight: Math.min(Math.max(tabBar.height + Tokens.spacing.small + list.contentHeight + Tokens.padding.large * 2, 320), 680)
+
+    // Nur als Referenz für die Standard-Schriftgröße
+    StyledText {
+        id: fontRef
+
+        visible: false
+    }
+
+    Row {
+        id: tabBar
+
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: Tokens.padding.large
+        spacing: Tokens.spacing.small
+        height: 52
+
+        Repeater {
+            model: ShelfStore.tabs
+
+            StyledRect {
+                id: tab
+
+                required property var modelData
+                readonly property bool active: root.currentTab === modelData.key
+                readonly property int count: ShelfStore.modelFor(modelData.key).count
+                readonly property color fg: active ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+
+                width: (tabBar.width - tabBar.spacing * 2) / 3
+                height: tabBar.height
+                radius: Tokens.rounding.medium
+                color: active ? Colours.tPalette.m3surfaceContainerHigh
+                     : tabMouse.containsMouse ? Colours.tPalette.m3surfaceContainer : "transparent"
+
+                Column {
+                    anchors.centerIn: parent
+                    width: parent.width - Tokens.padding.small * 2
+                    spacing: 2
+
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 4
+
+                        MaterialIcon {
+                            text: tab.modelData.icon
+                            color: tab.fg
+                        }
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: tab.count > 0
+                            text: tab.count
+                            color: tab.fg
+                            font.pointSize: fontRef.font.pointSize * 0.8
+                        }
+                    }
+
+                    StyledText {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        text: tab.modelData.label
+                        color: tab.fg
+                        font.pointSize: fontRef.font.pointSize * 0.85
+                    }
+                }
+
+                MouseArea {
+                    id: tabMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: root.currentTab = tab.modelData.key
+                }
+            }
+        }
+    }
 
     Column {
-        anchors.centerIn: parent
-        visible: ShelfStore.entries.count === 0
+        anchors.centerIn: list
+        visible: root.currentModel.count === 0
         spacing: Tokens.spacing.small
 
         MaterialIcon {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "inventory_2"
+            text: root.currentTabInfo.icon
             color: Colours.palette.m3onSurfaceVariant
             fontStyle: Tokens.font.icon.large
         }
@@ -27,7 +114,7 @@ Item {
             width: 260
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            text: "Dateien, Bilder oder Links hierher ziehen"
+            text: root.currentTabInfo.empty
             color: Colours.palette.m3onSurfaceVariant
         }
     }
@@ -35,151 +122,21 @@ Item {
     ListView {
         id: list
 
-        anchors.fill: parent
-        anchors.margins: Tokens.padding.large
+        anchors.top: tabBar.bottom
+        anchors.topMargin: Tokens.spacing.small
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: Tokens.padding.large
+        anchors.rightMargin: Tokens.padding.large
+        anchors.bottomMargin: Tokens.padding.large
         spacing: Tokens.spacing.small
         clip: true
         interactive: contentHeight > height
-        model: ShelfStore.entries
+        model: root.currentModel
 
-        delegate: StyledRect {
-            id: chip
-
-            required property string kind
-            required property string url
-            required property string name
-            required property string source
-            required property bool available
-            required property bool isDir
-            required property string thumb
-            required property int index
-
-            readonly property string previewSource: {
-                if (!available) return "";
-                if (thumb !== "") return thumb;
-                if (kind === "file" && !isDir && ShelfStore.isImageName(url)) return url;
-                return "";
-            }
-
-            readonly property string iconName: {
-                if (!available) return "error";
-                if (kind === "link") return "link";
-                if (isDir) return "folder";
-                const n = name.toLowerCase();
-                if (/\.pdf$/.test(n)) return "picture_as_pdf";
-                if (/\.(mp4|mkv|webm|mov|avi)$/.test(n)) return "movie";
-                if (/\.(mp3|flac|ogg|opus|wav|m4a)$/.test(n)) return "music_note";
-                if (/\.(zip|tar|gz|xz|zst|7z|rar)$/.test(n)) return "folder_zip";
-                if (ShelfStore.isImageName(n)) return "image";
-                return "description";
-            }
-
-            readonly property string subtitle: {
-                if (kind === "link") return ShelfStore.host(url);
-                if (ShelfStore.isOwn(url)) return "Download · " + ShelfStore.host(source);
-                const p = ShelfStore.toPath(url);
-                const dir = p.substring(0, p.lastIndexOf("/"));
-                return dir.startsWith(ShelfStore.home) ? "~" + dir.slice(ShelfStore.home.length) : dir;
-            }
-
-            width: ListView.view.width
-            implicitHeight: 64
-            radius: Tokens.rounding.medium
-            opacity: chip.available ? 1 : 0.45
-            color: chipMouse.containsMouse ? Colours.tPalette.m3surfaceContainerHigh : Colours.tPalette.m3surfaceContainer
-
-            Drag.dragType: Drag.Automatic
-            Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
-            Drag.mimeData: chip.kind === "link"
-                ? ({ "text/uri-list": chip.url + "\r\n", "text/plain": chip.url })
-                : ({ "text/uri-list": chip.url + "\r\n" })
-            Drag.onDragFinished: dropAction => {
-                chip.Drag.active = false;
-                ShelfStore.dragging = false;
-            }
-
-            StyledRect {
-                id: preview
-
-                anchors.left: parent.left
-                anchors.leftMargin: Tokens.padding.small
-                anchors.verticalCenter: parent.verticalCenter
-                width: 48
-                height: 48
-                radius: Tokens.rounding.small
-                color: Colours.tPalette.m3surfaceContainerHigh
-                clip: true
-
-                Image {
-                    id: img
-
-                    anchors.fill: parent
-                    asynchronous: true
-                    fillMode: Image.PreserveAspectCrop
-                    sourceSize.width: 96
-                    sourceSize.height: 96
-                    source: chip.previewSource
-                    visible: status === Image.Ready
-                }
-
-                MaterialIcon {
-                    anchors.centerIn: parent
-                    visible: img.status !== Image.Ready
-                    text: chip.iconName
-                    fontStyle: Tokens.font.icon.large
-                    color: !chip.available ? Colours.palette.m3error
-                         : chip.kind === "link" ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
-                }
-            }
-
-            Column {
-                anchors.left: preview.right
-                anchors.leftMargin: Tokens.spacing.medium
-                anchors.right: parent.right
-                anchors.rightMargin: Tokens.padding.large
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 2
-
-                StyledText {
-                    id: title
-
-                    width: parent.width
-                    elide: Text.ElideMiddle
-                    font.strikeout: !chip.available
-                    color: Colours.palette.m3onSurface
-                    text: chip.name
-                }
-
-                StyledText {
-                    width: parent.width
-                    elide: Text.ElideRight
-                    font.pointSize: title.font.pointSize * 0.85
-                    color: Colours.palette.m3onSurfaceVariant
-                    text: chip.subtitle
-                }
-            }
-
-            MouseArea {
-                id: chipMouse
-
-                property point pressPos
-
-                anchors.fill: parent
-                hoverEnabled: true
-                preventStealing: true
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onPressed: mouse => pressPos = Qt.point(mouse.x, mouse.y)
-                onClicked: mouse => {
-                    if (mouse.button === Qt.RightButton) ShelfStore.removeAt(chip.index);
-                    else if (chip.available) Qt.openUrlExternally(chip.url);
-                }
-                onPositionChanged: mouse => {
-                    if (!chip.available || !(pressedButtons & Qt.LeftButton) || chip.Drag.active) return;
-                    if (Math.hypot(mouse.x - pressPos.x, mouse.y - pressPos.y) < 10) return;
-                    ShelfStore.dragging = true;
-                    chip.Drag.active = true;
-                }
-            }
+        delegate: ShelfItem {
+            shelfKey: root.currentTab
         }
     }
 }

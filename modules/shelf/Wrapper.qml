@@ -29,6 +29,7 @@ Item {
     Content {
         id: content
 
+        dragOver: root.dragOver
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
     }
