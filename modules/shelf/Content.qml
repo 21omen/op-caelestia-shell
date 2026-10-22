@@ -16,6 +16,22 @@ Item {
     // Nur bei Drags von außen auf „Regal“ springen. Ein eigener Drag aus einem
     // anderen Reiter würde sonst durch den Listenwechsel seine Quelle zerstören.
     onDragOverChanged: if (dragOver && !ShelfStore.dragging) currentTab = "main"
+    onCurrentTabChanged: ShelfStore.clearAllSelections()
+    onDropHoverChanged: if (dropHover && !ShelfStore.dragging) currentTab = "main"
+
+    readonly property bool hovered: panelHover.hovered
+    readonly property bool dropHover: panelDrop.containsDrag
+
+    HoverHandler {
+        id: panelHover
+    }
+
+    DropArea {
+        id: panelDrop
+
+        anchors.fill: parent
+        onDropped: drop => ShelfStore.handleDrop(drop)
+    }
 
     implicitWidth: 360
     implicitHeight: Math.min(Math.max(tabBar.height + Tokens.spacing.small + list.contentHeight + Tokens.padding.large * 2, 320), 680)
@@ -52,7 +68,7 @@ Item {
                 height: tabBar.height
                 radius: Tokens.rounding.medium
                 color: active ? Colours.tPalette.m3surfaceContainerHigh
-                     : tabMouse.containsMouse ? Colours.tPalette.m3surfaceContainer : "transparent"
+                     : tabHover.hovered ? Colours.tPalette.m3surfaceContainer : "transparent"
 
                 Column {
                     anchors.centerIn: parent
@@ -85,6 +101,10 @@ Item {
                         color: tab.fg
                         font.pointSize: fontRef.font.pointSize * 0.85
                     }
+                }
+
+                HoverHandler {
+                    id: tabHover
                 }
 
                 MouseArea {

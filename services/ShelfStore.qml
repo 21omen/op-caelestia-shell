@@ -84,7 +84,7 @@ done`
 
     function newEntry(kind, url, name, source) {
         const shown = kind === "file" && isOwn(url) ? name.replace(/^\d{13}-/, "") : name;
-        return { kind: kind, url: url, name: shown, source: source ?? "", available: true, isDir: false, thumb: "" };
+        return { kind: kind, url: url, name: shown, source: source ?? "", available: true, isDir: false, thumb: "", selected: false };
     }
 
     // --- Speichern / Laden -------------------------------------------------
@@ -150,8 +150,9 @@ done`
         checkFiles();
     }
 
-    function removeAt(key, i) {
-        const m = modelFor(key);
+    // --- Entfernen ---------------------------------------------------------
+
+    function removeOne(m, key, i) {
         const e = m.get(i);
         if (e.kind === "file" && isOwn(e.url)) {
             const p = toPath(e.url);
@@ -165,7 +166,76 @@ done`
             dismissed = d;
         }
         m.remove(i);
+    }
+
+    // Rechtsklick auf einen markierten Eintrag entfernt die ganze Auswahl
+    function removeAt(key, i) {
+        const m = modelFor(key);
+        const targets = m.get(i).selected ? selectedIndices(key) : [i];
+        for (let k = targets.length - 1; k >= 0; k--)
+            removeOne(m, key, targets[k]);
+        recount();
         save();
+    }
+
+    // --- Auswahl -----------------------------------------------------------
+
+    property int selectionCount: 0
+
+    function recount() {
+        let n = 0;
+        for (const m of [mainModel, shotsModel, dlModel])
+            for (let i = 0; i < m.count; i++)
+                if (m.get(i).selected) n++;
+        selectionCount = n;
+    }
+
+    function selectedIndices(key) {
+        const m = modelFor(key);
+        const out = [];
+        for (let i = 0; i < m.count; i++)
+            if (m.get(i).selected) out.push(i);
+        return out;
+    }
+
+    function toggleSelect(key, i) {
+        const m = modelFor(key);
+        m.setProperty(i, "selected", !m.get(i).selected);
+        recount();
+    }
+
+    function clearSelection(key) {
+        const m = modelFor(key);
+        for (let i = 0; i < m.count; i++)
+            if (m.get(i).selected) m.setProperty(i, "selected", false);
+        recount();
+    }
+
+    function clearAllSelections() {
+        for (const t of tabs)
+            clearSelection(t.key);
+    }
+
+    // Markierter Eintrag: alle markierten (mit Datei) — sonst nur er selbst
+    function dragUrls(key, i) {
+        const m = modelFor(key);
+        const e = m.get(i);
+        const urls = [];
+        if (e.selected)
+            for (let j = 0; j < m.count; j++) {
+                const x = m.get(j);
+                if (x.selected && x.available) urls.push(x.url);
+            }
+        if (urls.length === 0) urls.push(e.url);
+        return urls;
+    }
+
+    function mimeFor(key, i) {
+        const urls = dragUrls(key, i);
+        const mime = { "text/uri-list": urls.join("\r\n") + "\r\n" };
+        if (urls.every(u => /^https?:/.test(u)))
+            mime["text/plain"] = urls.join("\n");
+        return mime;
     }
 
     function open(url) {

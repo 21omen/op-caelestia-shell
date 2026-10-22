@@ -15,6 +15,7 @@ StyledRect {
     required property bool available
     required property bool isDir
     required property string thumb
+    required property bool selected
     required property int index
 
     property string shelfKey: "main"
@@ -51,21 +52,31 @@ StyledRect {
     implicitHeight: 64
     radius: Tokens.rounding.medium
     opacity: chip.available ? 1 : 0.45
-    color: chipMouse.containsMouse ? Colours.tPalette.m3surfaceContainerHigh : Colours.tPalette.m3surfaceContainer
+    color: chip.selected ? Colours.palette.m3secondaryContainer : Colours.tPalette.m3surfaceContainer
 
     Drag.dragType: Drag.Automatic
     Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
-    Drag.mimeData: chip.kind === "link"
-        ? ({ "text/uri-list": chip.url + "\r\n", "text/plain": chip.url })
-        : ({ "text/uri-list": chip.url + "\r\n" })
     Drag.onDragFinished: dropAction => {
         chip.Drag.active = false;
         ShelfStore.dragging = false;
+        ShelfStore.clearSelection(chip.shelfKey);
     }
 
     // Wird der Eintrag während eines eigenen Drags zerstört (Reiterwechsel, Entfernen),
     // kommt kein dragFinished mehr — ohne diese Zeile bliebe das Regal offen.
     Component.onDestruction: if (chip.Drag.active) ShelfStore.dragging = false
+
+    // Hover-Hervorhebung wie Caelestias StateLayer: leichte Aufhellung in der Textfarbe
+    StyledRect {
+        anchors.fill: parent
+        radius: chip.radius
+        color: Colours.palette.m3onSurface
+        opacity: chipHover.hovered && !chip.selected ? 0.1 : 0
+
+        Behavior on opacity {
+            Anim {}
+        }
+    }
 
     StyledRect {
         id: preview
@@ -104,8 +115,8 @@ StyledRect {
     Column {
         anchors.left: preview.right
         anchors.leftMargin: Tokens.spacing.medium
-        anchors.right: parent.right
-        anchors.rightMargin: Tokens.padding.large
+        anchors.right: selectBox.left
+        anchors.rightMargin: Tokens.spacing.small
         anchors.verticalCenter: parent.verticalCenter
         spacing: 2
 
@@ -152,8 +163,38 @@ StyledRect {
         onPositionChanged: mouse => {
             if (!chip.available || !(pressedButtons & Qt.LeftButton) || chip.Drag.active) return;
             if (Math.hypot(mouse.x - pressPos.x, mouse.y - pressPos.y) < 10) return;
+            chip.Drag.mimeData = ShelfStore.mimeFor(chip.shelfKey, chip.index);
             ShelfStore.dragging = true;
             chip.Drag.active = true;
         }
+    }
+
+    // Auswahl-Symbol: bei Hover sichtbar, bei aktiver Auswahl an allen Einträgen
+    MaterialIcon {
+        id: selectBox
+
+        anchors.right: parent.right
+        anchors.rightMargin: Tokens.padding.large
+        anchors.verticalCenter: parent.verticalCenter
+        text: chip.selected ? "check_circle" : "radio_button_unchecked"
+        color: chip.selected ? Colours.palette.m3primary : Colours.palette.m3outline
+        opacity: chip.selected || chipHover.hovered || ShelfStore.selectionCount > 0 ? 1 : 0
+    }
+
+    // Klickfläche für die Auswahl: der ganze rechte Streifen des Eintrags,
+    // damit ein knapp danebengehender Klick nicht die Datei öffnet
+    MouseArea {
+        id: selectMouse
+
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 52
+        onClicked: ShelfStore.toggleSelect(chip.shelfKey, chip.index)
+    }
+
+    // MouseArea-Hover kommt im Drawer-Fenster nicht an, HoverHandler schon
+    HoverHandler {
+        id: chipHover
     }
 }

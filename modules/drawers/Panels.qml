@@ -94,7 +94,7 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: -root.borderThickness
         anchors.verticalCenter: parent.verticalCenter
-        width: shelfWrapper.width + root.borderThickness
+        width: root.borderThickness
         height: Math.max(shelf.implicitHeight, 360)
 
         HoverHandler {

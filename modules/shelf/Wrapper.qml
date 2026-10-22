@@ -11,10 +11,10 @@ Item {
     property bool hovered
     property bool dragOver
 
-    readonly property bool shouldBeActive: hovered || dragOver || ShelfStore.dragging
+    readonly property bool shouldBeActive: hovered || dragOver || content.hovered || content.dropHover || ShelfStore.dragging
     property real offsetScale: shouldBeActive ? 0 : 1
 
-    onShouldBeActiveChanged: if (shouldBeActive) ShelfStore.checkFiles()
+    onShouldBeActiveChanged: shouldBeActive ? ShelfStore.checkFiles() : ShelfStore.clearAllSelections()
 
     visible: offsetScale < 1
     anchors.rightMargin: (-implicitWidth - 5) * offsetScale
