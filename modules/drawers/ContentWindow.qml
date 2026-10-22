@@ -218,6 +218,15 @@ StyledWindow {
         }
 
         PanelBg {
+            id: shelfBg
+
+            panel: panels.shelfWrapper
+            deformAmount: 0.2
+            x: panels.shelfWrapper.x + panels.shelf.x + bar.implicitWidth
+            implicitWidth: panels.shelf.width
+        }
+
+        PanelBg {
             id: notifsBg
 
             panel: panels.notifications
@@ -282,6 +291,9 @@ StyledWindow {
             }
             sidebar.transform: Matrix4x4 {
                 matrix: sidebarBg.deformMatrix
+            }
+            shelf.transform: Matrix4x4 {
+                matrix: shelfBg.deformMatrix
             }
             osd.transform: Matrix4x4 {
                 matrix: osdBg.deformMatrix
