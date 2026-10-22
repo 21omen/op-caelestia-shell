@@ -136,11 +136,18 @@ StyledRect {
         anchors.fill: parent
         hoverEnabled: true
         preventStealing: true
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => pressPos = Qt.point(mouse.x, mouse.y)
         onClicked: mouse => {
-            if (mouse.button === Qt.RightButton) ShelfStore.removeAt(chip.shelfKey, chip.index);
-            else if (chip.available) Qt.openUrlExternally(chip.url);
+            if (mouse.button === Qt.RightButton) {
+                ShelfStore.removeAt(chip.shelfKey, chip.index);
+            } else if (!chip.available) {
+                return;
+            } else if (chip.kind === "file" && (mouse.button === Qt.MiddleButton || chip.shelfKey === "downloads")) {
+                ShelfStore.reveal(chip.url);
+            } else if (mouse.button === Qt.LeftButton) {
+                ShelfStore.open(chip.url);
+            }
         }
         onPositionChanged: mouse => {
             if (!chip.available || !(pressedButtons & Qt.LeftButton) || chip.Drag.active) return;

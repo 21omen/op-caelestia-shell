@@ -168,6 +168,14 @@ done`
         save();
     }
 
+    function open(url) {
+        Quickshell.execDetached(["xdg-open", url.startsWith("file://") ? toPath(url) : url]);
+    }
+
+    function reveal(url) {
+        Quickshell.execDetached(["dolphin", "--select", toPath(url)]);
+    }
+
     function linkTitle(drop, url) {
         if (drop.formats.includes("_NETSCAPE_URL")) {
             const lines = drop.getDataAsString("_NETSCAPE_URL").split("\n");
@@ -210,9 +218,10 @@ done`
     }
 
     // --- Automatische Reiter -----------------------------------------------
-    // Beim ersten vollständigen Einlesen merkt sich jeder Watcher die vorhandenen
-    // Dateinamen. Aufgenommen wird nur, was danach neu auftaucht — unabhängig vom
-    // Änderungsdatum (FluxDown setzt z. B. das Datum vom Server).
+    // FolderListModel meldet eine Umbenennung bei gleicher Dateianzahl nur als
+    // dataChanged, nicht als rowsInserted (FluxDown: .fdownloading -> fertige Datei).
+    // Deshalb wird bei jeder Änderung die ganze Liste gegen die bekannten Namen
+    // abgeglichen. Beim ersten Einlesen werden nur die vorhandenen Namen gemerkt.
 
     function prime(watcher) {
         const k = {};
@@ -222,17 +231,22 @@ done`
         watcher.primed = true;
     }
 
-    function collect(watcher, key, first, last) {
+    function scan(watcher, key) {
         if (!watcher.primed) return;
-        for (let i = first; i <= last; i++) {
+        const present = {};
+        for (let i = 0; i < watcher.count; i++) {
             const name = watcher.get(i, "fileName");
+            present[name] = true;
             if (watcher.known[name]) continue;
-            if (name.startsWith(".") || /\.(part|crdownload|tmp|download|fdownloading)$/i.test(name)) continue;
-            watcher.known[name] = true;
+            if (name.startsWith(".") || /\.(part|crdownload|tmp|download|fdownloading)$/i.test(name)) {
+                console.log("shelf: skipped temp file", name);
+                continue;
+            }
             const url = watcher.get(i, "fileUrl").toString();
             if (dismissed[url]) continue;
             addEntry("file", url, name, "", key, true);
         }
+        watcher.known = present;
     }
 
     component Watcher: FolderListModel {
@@ -246,14 +260,18 @@ done`
         id: shotWatcher
         folder: "file://" + root.screenshotDir
         onStatusChanged: if (shotWatcher.status === FolderListModel.Ready && !shotWatcher.primed) root.prime(shotWatcher)
-        onRowsInserted: (parent, first, last) => root.collect(shotWatcher, "screenshots", first, last)
+        onCountChanged: root.scan(shotWatcher, "screenshots")
+        onDataChanged: root.scan(shotWatcher, "screenshots")
+        onModelReset: root.scan(shotWatcher, "screenshots")
     }
 
     Watcher {
         id: dlWatcher
         folder: "file://" + root.downloadDir
         onStatusChanged: if (dlWatcher.status === FolderListModel.Ready && !dlWatcher.primed) root.prime(dlWatcher)
-        onRowsInserted: (parent, first, last) => root.collect(dlWatcher, "downloads", first, last)
+        onCountChanged: root.scan(dlWatcher, "downloads")
+        onDataChanged: root.scan(dlWatcher, "downloads")
+        onModelReset: root.scan(dlWatcher, "downloads")
     }
 
     // --- Existenz- und Vorschauprüfung -------------------------------------
