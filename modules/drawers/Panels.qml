@@ -10,6 +10,8 @@ import qs.modules.osd as Osd
 import qs.modules.session as Session
 import qs.modules.sidebar as Sidebar
 import qs.modules.utilities as Utilities
+import qs.modules.shelf as Shelf
+import qs.services
 import qs.modules.dock as Dock
 import qs.modules.bar.popouts as BarPopouts
 import qs.modules.utilities.toasts as Toasts
@@ -35,6 +37,8 @@ Item {
     readonly property alias utilities: utilities
     readonly property alias toasts: toasts
     readonly property alias sidebar: sidebar
+    readonly property alias shelf: shelf
+    readonly property alias shelfWrapper: shelfWrapper
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -60,6 +64,48 @@ Item {
 
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
+        }
+    }
+
+    Item {
+        id: shelfWrapper
+
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right
+        clip: sidebar.visible || session.visible
+
+        implicitWidth: shelf.implicitWidth * (1 - shelf.offsetScale)
+        implicitHeight: shelf.implicitHeight
+
+        Shelf.Wrapper {
+            id: shelf
+
+            hovered: shelfHover.hovered
+            dragOver: shelfDrop.containsDrag
+
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+        }
+    }
+
+    Item {
+        id: shelfZone
+
+        anchors.right: parent.right
+        anchors.rightMargin: -root.borderThickness
+        anchors.verticalCenter: parent.verticalCenter
+        width: shelfWrapper.width + root.borderThickness
+        height: Math.max(shelf.implicitHeight, 360)
+
+        HoverHandler {
+            id: shelfHover
+        }
+
+        DropArea {
+            id: shelfDrop
+
+            anchors.fill: parent
+            onDropped: drop => ShelfStore.handleDrop(drop)
         }
     }
 

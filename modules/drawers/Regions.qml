@@ -65,6 +65,12 @@ Region {
     }
 
     R {
+        panel: root.panels.shelfWrapper
+        x: root.win.width - width
+        width: panel.width * (1 - root.panels.shelf.offsetScale) + root.borderThickness
+    }
+
+    R {
         panel: root.panels.notifications
         y: 0
         height: panel.height + root.borderThickness
