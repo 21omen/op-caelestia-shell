@@ -8,14 +8,28 @@ import qs.services
 Item {
     id: root
 
-    implicitWidth: 320
-    implicitHeight: Math.min(Math.max(list.contentHeight, 48) + Tokens.padding.large * 2, 560)
+    implicitWidth: 360
+    implicitHeight: Math.min(Math.max(list.contentHeight + Tokens.padding.large * 2, 280), 640)
 
-    StyledText {
+    Column {
         anchors.centerIn: parent
         visible: ShelfStore.entries.count === 0
-        text: "Dateien hierher ziehen"
-        color: Colours.palette.m3onSurfaceVariant
+        spacing: Tokens.spacing.small
+
+        MaterialIcon {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: "inventory_2"
+            color: Colours.palette.m3onSurfaceVariant
+            fontStyle: Tokens.font.icon.large
+        }
+
+        StyledText {
+            width: 260
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            text: "Dateien, Bilder oder Links hierher ziehen"
+            color: Colours.palette.m3onSurfaceVariant
+        }
     }
 
     ListView {
@@ -34,11 +48,42 @@ Item {
             required property string kind
             required property string url
             required property string name
+            required property string source
             required property bool available
+            required property bool isDir
+            required property string thumb
             required property int index
 
+            readonly property string previewSource: {
+                if (!available) return "";
+                if (thumb !== "") return thumb;
+                if (kind === "file" && !isDir && ShelfStore.isImageName(url)) return url;
+                return "";
+            }
+
+            readonly property string iconName: {
+                if (!available) return "error";
+                if (kind === "link") return "link";
+                if (isDir) return "folder";
+                const n = name.toLowerCase();
+                if (/\.pdf$/.test(n)) return "picture_as_pdf";
+                if (/\.(mp4|mkv|webm|mov|avi)$/.test(n)) return "movie";
+                if (/\.(mp3|flac|ogg|opus|wav|m4a)$/.test(n)) return "music_note";
+                if (/\.(zip|tar|gz|xz|zst|7z|rar)$/.test(n)) return "folder_zip";
+                if (ShelfStore.isImageName(n)) return "image";
+                return "description";
+            }
+
+            readonly property string subtitle: {
+                if (kind === "link") return ShelfStore.host(url);
+                if (ShelfStore.isOwn(url)) return "Download · " + ShelfStore.host(source);
+                const p = ShelfStore.toPath(url);
+                const dir = p.substring(0, p.lastIndexOf("/"));
+                return dir.startsWith(ShelfStore.home) ? "~" + dir.slice(ShelfStore.home.length) : dir;
+            }
+
             width: ListView.view.width
-            implicitHeight: 40
+            implicitHeight: 64
             radius: Tokens.rounding.medium
             opacity: chip.available ? 1 : 0.45
             color: chipMouse.containsMouse ? Colours.tPalette.m3surfaceContainerHigh : Colours.tPalette.m3surfaceContainer
@@ -53,27 +98,65 @@ Item {
                 ShelfStore.dragging = false;
             }
 
-            MaterialIcon {
-                id: icon
+            StyledRect {
+                id: preview
 
                 anchors.left: parent.left
-                anchors.leftMargin: Tokens.padding.large
+                anchors.leftMargin: Tokens.padding.small
                 anchors.verticalCenter: parent.verticalCenter
-                text: !chip.available ? "error" : chip.kind === "link" ? "link" : "description"
-                color: !chip.available ? Colours.palette.m3error
-                     : chip.kind === "link" ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                width: 48
+                height: 48
+                radius: Tokens.rounding.small
+                color: Colours.tPalette.m3surfaceContainerHigh
+                clip: true
+
+                Image {
+                    id: img
+
+                    anchors.fill: parent
+                    asynchronous: true
+                    fillMode: Image.PreserveAspectCrop
+                    sourceSize.width: 96
+                    sourceSize.height: 96
+                    source: chip.previewSource
+                    visible: status === Image.Ready
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    visible: img.status !== Image.Ready
+                    text: chip.iconName
+                    fontStyle: Tokens.font.icon.large
+                    color: !chip.available ? Colours.palette.m3error
+                         : chip.kind === "link" ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                }
             }
 
-            StyledText {
-                anchors.left: icon.right
-                anchors.leftMargin: Tokens.spacing.small
+            Column {
+                anchors.left: preview.right
+                anchors.leftMargin: Tokens.spacing.medium
                 anchors.right: parent.right
                 anchors.rightMargin: Tokens.padding.large
                 anchors.verticalCenter: parent.verticalCenter
-                elide: Text.ElideMiddle
-                font.strikeout: !chip.available
-                color: Colours.palette.m3onSurface
-                text: chip.name
+                spacing: 2
+
+                StyledText {
+                    id: title
+
+                    width: parent.width
+                    elide: Text.ElideMiddle
+                    font.strikeout: !chip.available
+                    color: Colours.palette.m3onSurface
+                    text: chip.name
+                }
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    font.pointSize: title.font.pointSize * 0.85
+                    color: Colours.palette.m3onSurfaceVariant
+                    text: chip.subtitle
+                }
             }
 
             MouseArea {
