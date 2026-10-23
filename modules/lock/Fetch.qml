@@ -12,7 +12,7 @@ import qs.components.effects
 import qs.services
 import qs.utils
 
-StyledClippingRect {
+ClipRect {
     id: root
 
     required property real rootHeight

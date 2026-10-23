@@ -5,7 +5,7 @@
 
 #include <qstringlist.h>
 
-namespace caelestia::config {
+namespace caelestia::shell::config {
 
 class DockConfig : public settings::ObjectNode {
     CONFIG_NODE(DockConfig, settings::ObjectNode)
@@ -17,4 +17,4 @@ class DockConfig : public settings::ObjectNode {
     CONFIG_GLOBAL_PROPERTY(QStringList, pinnedApps, {})
 };
 
-} // namespace caelestia::config
+} // namespace caelestia::shell::config

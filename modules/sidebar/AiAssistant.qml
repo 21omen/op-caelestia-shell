@@ -1419,7 +1419,7 @@ Item {
                  radius: Tokens.rounding.full
                  color: Colours.tPalette.m3surfaceContainer
 
-                 StyledClippingRect {
+                 ClipRect {
                      z: -1
                      anchors.fill: parent
                      radius: Tokens.rounding.full
@@ -1948,7 +1948,7 @@ Item {
                      color: Colours.tPalette.m3surfaceContainer
                      radius: 24
 
-                     StyledClippingRect {
+                     ClipRect {
                          z: -1
                          anchors.fill: parent
                          radius: 24

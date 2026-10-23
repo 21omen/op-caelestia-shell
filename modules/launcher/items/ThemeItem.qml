@@ -1,7 +1,7 @@
 import QtQuick
 import Caelestia.Config
 import qs.components
-import qs.components.images
+import Caelestia.Multimedia
 import qs.services
 import qs.modules.launcher.services
 
@@ -27,7 +27,7 @@ Item {
         anchors.rightMargin: Tokens.padding.medium
         anchors.margins: Tokens.padding.small
 
-        StyledClippingRect {
+        ClipRect {
             id: preview
 
             anchors.verticalCenter: parent.verticalCenter
@@ -42,9 +42,9 @@ Item {
                 fontStyle: Tokens.font.icon.extraLarge
             }
 
-            CachingImage {
+            Visual {
                 anchors.fill: parent
-                path: root.modelData?.wallpaperPath ?? ""
+                source: root.modelData?.wallpaperPath ?? ""
             }
         }
 

@@ -6,7 +6,7 @@
 #include "settings/objectnode.hpp"
 #include "common.hpp"
 
-namespace caelestia::config {
+namespace caelestia::shell::config {
 
 using Qt::StringLiterals::operator""_s;
 
@@ -71,10 +71,11 @@ class UtilitiesConfig : public settings::ObjectNode {
             LIST_ENTRY(mic, true),
             LIST_ENTRY(settings, true),
             LIST_ENTRY(gameMode, true),
+            LIST_ENTRY(wallpaperPlaying, true),
             LIST_ENTRY(dnd, true),
             LIST_ENTRY(vpn, false),
             LIST_ENTRY(hotspot, true),
         }))
 };
 
-} // namespace caelestia::config
+} // namespace caelestia::shell::config

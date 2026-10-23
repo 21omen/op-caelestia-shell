@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import Quickshell.Widgets
 import Caelestia
 import Caelestia.Config
 import qs.components
@@ -170,7 +169,7 @@ ColumnLayout {
             anchors.margins: Tokens.padding.small
             spacing: Tokens.spacing.small
 
-            ClippingRectangle {
+            ClipRect {
                 implicitWidth: 36
                 implicitHeight: 36
                 radius: Tokens.rounding.small

@@ -57,7 +57,7 @@ PageBase {
                         spacing: Tokens.spacing.small
 
                         // Wallpaper preview thumbnail
-                        StyledClippingRect {
+                        ClipRect {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             radius: Tokens.rounding.medium

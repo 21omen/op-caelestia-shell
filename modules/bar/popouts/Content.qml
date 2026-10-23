@@ -109,7 +109,6 @@ Item {
             }
         }
         // caelestia-connect: end
-
         Popout {
             name: "battery"
             sourceComponent: Battery {}

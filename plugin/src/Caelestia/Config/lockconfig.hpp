@@ -5,7 +5,7 @@
 
 #include <qstring.h>
 
-namespace caelestia::config {
+namespace caelestia::shell::config {
 
 using Qt::StringLiterals::operator""_s;
 
@@ -27,4 +27,4 @@ class LockConfig : public settings::ObjectNode {
     CONFIG_GLOBAL_PROPERTY(bool, enableSessionControls, false)
 };
 
-} // namespace caelestia::config
+} // namespace caelestia::shell::config

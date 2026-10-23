@@ -6,7 +6,7 @@
 #include "settings/objectnode.hpp"
 #include "common.hpp"
 
-namespace caelestia::config {
+namespace caelestia::shell::config {
 
 using Qt::StringLiterals::operator""_s;
 
@@ -54,4 +54,4 @@ private:
     }
 };
 
-} // namespace caelestia::config
+} // namespace caelestia::shell::config
