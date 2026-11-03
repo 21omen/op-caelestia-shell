@@ -215,6 +215,22 @@ done`
         for (const t of tabs)
             clearSelection(t.key);
     }
+    
+    function selectAll(key) {
+        const m = modelFor(key);
+        for (let i = 0; i < m.count; i++)
+            if (!m.get(i).selected) m.setProperty(i, "selected", true);
+        recount();
+    }
+
+    function removeSelected(key) {
+        const m = modelFor(key);
+        const targets = selectedIndices(key);
+        for (let k = targets.length - 1; k >= 0; k--)
+            removeOne(m, key, targets[k]);
+        recount();
+        save();
+    }
 
     // Markierter Eintrag: alle markierten (mit Datei) — sonst nur er selbst
     function dragUrls(key, i) {
@@ -393,7 +409,10 @@ done`
                     m.remove(i);
                     removed = true;
                 }
-        if (removed) save();
+        if (removed) {
+            recount();
+            save();
+        }
     }
 
     Process {
