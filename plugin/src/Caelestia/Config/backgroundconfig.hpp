@@ -41,6 +41,7 @@ class BackgroundVisualiser : public settings::ObjectNode {
     CONFIG_NODE(BackgroundVisualiser, settings::ObjectNode)
 
     CONFIG_PROPERTY(bool, enabled, false)
+    CONFIG_PROPERTY(QString, style, u"bars"_s)
     CONFIG_PROPERTY(bool, autoHide, true)
     CONFIG_PROPERTY(bool, blur, false)
     CONFIG_PROPERTY(qreal, rounding, 1)

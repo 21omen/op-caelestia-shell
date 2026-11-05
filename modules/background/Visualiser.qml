@@ -55,28 +55,48 @@ Item {
                     service: Audio.cava
                 }
 
-                VisualiserBars {
-                    id: bars
+                Loader {
+                    id: style
 
                     anchors.fill: parent
                     anchors.margins: Config.border.thickness
                     anchors.leftMargin: (ShellState.componentsFor(root.screen)?.bar?.exclusiveZone ?? 0) + Tokens.spacing.small * Config.background.visualiser.spacing
 
-                    values: Audio.cava.values
-                    primaryColor: Qt.alpha(Colours.palette.m3primary, 0.7)
-                    secondaryColor: Qt.alpha(Colours.palette.m3inversePrimary, 0.7)
-                    rounding: Tokens.rounding.medium * Config.background.visualiser.rounding
-                    spacing: Tokens.spacing.extraSmall * Config.background.visualiser.spacing
-                    animationDuration: Tokens.anim.durations.normal
+                    sourceComponent: Config.background.visualiser.style === "rings" ? ringsComp : barsComp
 
                     Behavior on anchors.leftMargin {
                         Anim {}
                     }
                 }
 
+                Component {
+                    id: barsComp
+
+                    VisualiserBars {
+                        values: Audio.cava.values
+                        primaryColor: Qt.alpha(Colours.palette.m3primary, 0.7)
+                        secondaryColor: Qt.alpha(Colours.palette.m3inversePrimary, 0.7)
+                        rounding: Tokens.rounding.medium * Config.background.visualiser.rounding
+                        spacing: Tokens.spacing.extraSmall * Config.background.visualiser.spacing
+                        animationDuration: Tokens.anim.durations.normal
+                    }
+                }
+
+                Component {
+                    id: ringsComp
+
+                    RingVisualiser {
+                        values: Audio.cava.values
+                        primaryColor: Qt.alpha(Colours.palette.m3primary, 0.7)
+                        secondaryColor: Qt.alpha(Colours.palette.m3secondary, 0.6)
+                        tertiaryColor: Qt.alpha(Colours.palette.m3tertiary, 0.5)
+                        animationDuration: Tokens.anim.durations.normal
+                    }
+                }
+
                 FrameAnimation {
-                    running: root.opacity > 0 && !bars.settled
-                    onTriggered: bars.advance(frameTime)
+                    running: root.opacity > 0 && !(style.item?.settled ?? true)
+                    onTriggered: style.item?.advance(frameTime)
                 }
             }
         }
